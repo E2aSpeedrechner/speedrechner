@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Speedrechner – Polizei GAL E2a</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin-top: 60px;
+    }
+    .zahl {
+        font-size: 60px;
+        margin: 10px;
+    }
+    #info {
+        margin-top: 30px;
+        font-size: 16px;
+    }
+    input {
+        font-size: 22px;
+        width: 80px;
+        text-align: center;
+    }
+    button {
+        font-size: 16px;
+        margin-top: 15px;
+    }
+</style>
+</head>
+<body>
+
+<div id="oben" class="zahl"></div>
+<div id="plus" class="zahl">+</div>
+<div id="unten" class="zahl"></div>
+
+<input id="eingabe" type="number" autofocus>
+<br>
+<button onclick="pruefen()">OK</button>
+
+<div id="info"></div>
+
+<script>
+let testdauer = 20 * 60;
+let startzeit = Date.now();
+
+let richtig = 0;
+let falsch = 0;
+let ersteRunde = true;
+
+let aktuelleZahl = zufall();
+let gemerkteZahl = zufall();
+
+const oben = document.getElementById("oben");
+const unten = document.getElementById("unten");
+const plus = document.getElementById("plus");
+const eingabe = document.getElementById("eingabe");
+const info = document.getElementById("info");
+
+oben.textContent = aktuelleZahl;
+unten.textContent = gemerkteZahl;
+
+eingabe.addEventListener("keydown", e => {
+    if (e.key === "Enter") pruefen();
+});
+
+function zufall() {
+    return Math.floor(Math.random() * 9) + 1;
+}
+
+function pruefen() {
+    if (eingabe.value === "") return;
+
+    const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
+
+    if (parseInt(eingabe.value) === korrekt) {
+        richtig++;
+    } else {
+        falsch++;
+    }
+
+    if (ersteRunde) {
+        unten.style.display = "none";
+        plus.style.display = "none";
+        ersteRunde = false;
+    }
+
+    gemerkteZahl = aktuelleZahl;
+    aktuelleZahl = zufall();
+    oben.textContent = aktuelleZahl;
+
+    eingabe.value = "";
+    updateInfo();
+}
+
+function updateInfo() {
+    const vergangen = Math.floor((Date.now() - startzeit) / 1000);
+    const rest = Math.max(0, testdauer - vergangen);
+    const min = String(Math.floor(rest / 60)).padStart(2, "0");
+    const sec = String(rest % 60).padStart(2, "0");
+
+    info.textContent =
+        `Zeit: ${min}:${sec} | Richtig: ${richtig} | Falsch: ${falsch}`;
+
+    if (rest === 0) {
+        document.body.innerHTML =
+            `<h1>ENDE</h1>
+             <p>Richtig: ${richtig}</p>
+             <p>Falsch: ${falsch}</p>`;
+    }
+}
+
+setInterval(updateInfo, 1000);
+updateInfo();
+</script>
+
+</body>
+</html>
