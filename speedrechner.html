@@ -44,7 +44,7 @@
     font-weight:bold;
     color:#7a0000;      /* dunkelrot */
     font-size:56px;     /* ca 2× "Auswertung" */
-    margin:0 0 25px 0;  /* Abstand zu Zahlen */
+    margin:0 0 50px 0;  /* Abstand zu Zahlen: verdoppelt */
   }
 
   .zahl{
@@ -62,6 +62,7 @@
   #info{
     margin-top:30px;
     font-size:16px;
+    min-height: 22px;   /* stabilisiert Zeilenhöhe */
   }
 
   .green{ color:green; }
@@ -120,7 +121,7 @@
   <div id="info"></div>
 </div>
 
-<!-- Statistikbereich (bleibt als Block erhalten, wird nur ein-/ausgeblendet) -->
+<!-- Statistikbereich -->
 <div id="statistik">
   <h3>Geschwindigkeit</h3>
   <canvas id="chart" width="900" height="340"></canvas>
@@ -131,10 +132,13 @@
 
 <script>
 /* ---------------- Einstellungen ---------------- */
-const TESTDAUER = 20 * 60;
+const TESTDAUER = 20 * 60; // Sekunden
 /* ----------------------------------------------- */
 
-let startzeit = Date.now();
+// Timer startet erst nach erster Eingabe:
+let startzeit = null;          // null = noch nicht gestartet
+let timerStarted = false;
+
 let richtig = 0;
 let falsch = 0;
 let ersteRunde = true;
@@ -176,9 +180,19 @@ function zufall(){
   return Math.floor(Math.random() * 9) + 1;
 }
 
+function starteTimerWennNoetig(){
+  if (!timerStarted) {
+    timerStarted = true;
+    startzeit = Date.now();
+  }
+}
+
 function pruefen(){
   const wert = parseInt(eingabe.value);
   if (isNaN(wert)) return;
+
+  // Timer beginnt erst ab der ersten Eingabe
+  starteTimerWennNoetig();
 
   eingabeZeiten.push(Date.now());
 
@@ -186,8 +200,10 @@ function pruefen(){
   (wert === korrekt) ? richtig++ : falsch++;
 
   if (ersteRunde){
-    unten.style.display = "none";
-    plus.style.display = "none";
+    // WICHTIG: Nicht display:none (würde Layout verschieben),
+    // sondern visibility:hidden (behält Platz, verschiebt nichts)
+    unten.style.visibility = "hidden";
+    plus.style.visibility = "hidden";
     ersteRunde = false;
   }
 
@@ -200,6 +216,15 @@ function pruefen(){
 }
 
 function updateInfo(){
+  // Vor dem Start: volle Zeit anzeigen, aber NICHT runterzählen
+  if (!timerStarted) {
+    info.innerHTML =
+      `Zeit: 20:00 | ` +
+      `Richtig: <span class="green">${richtig}</span> | ` +
+      `Falsch: <span class="red">${falsch}</span>`;
+    return;
+  }
+
   const vergangen = Math.floor((Date.now() - startzeit) / 1000);
   const rest = Math.max(0, TESTDAUER - vergangen);
 
@@ -288,12 +313,18 @@ function zeichneKurve(buckets){
 }
 
 function ende(abbruch){
+  // Wenn noch nie gestartet wurde: Auswertung trotzdem anzeigen (Zeit = 0)
+  if (!timerStarted) {
+    timerStarted = true;
+    startzeit = Date.now();
+  }
+
   // PDF Button sichtbar
   pdfBtn.style.display = "block";
 
   const dauerMin = (Date.now() - startzeit) / 60000;
   const gesamt = richtig + falsch;
-  const avgProMin = (gesamt / dauerMin) || 0;
+  const avgProMin = (gesamt / Math.max(dauerMin, 1/60)) || 0; // Schutz vor 0
 
   // Übungsbereich ersetzen (fixe Buttons bleiben!)
   practice.innerHTML = `
