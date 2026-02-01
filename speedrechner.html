@@ -3,47 +3,49 @@
 <head>
 <meta charset="UTF-8">
 <title>Speedrechner – Polizei GAL E2a</title>
+
 <style>
     body {
         font-family: Arial, sans-serif;
         text-align: center;
-        margin-top: 60px;
+        margin-top: 80px;
     }
+
     .zahl {
         font-size: 60px;
         margin: 10px;
     }
-    #info {
-        margin-top: 30px;
-        font-size: 16px;
-    }
-    input {
-        font-size: 22px;
-        width: 80px;
+
+    #eingabe {
+        font-size: 26px;
+        width: 70px;
         text-align: center;
+        margin-top: 30px;
     }
-    button {
+
+    #info {
+        margin-top: 40px;
         font-size: 16px;
-        margin-top: 15px;
     }
 </style>
 </head>
+
 <body>
 
 <div id="oben" class="zahl"></div>
 <div id="plus" class="zahl">+</div>
 <div id="unten" class="zahl"></div>
 
-<input id="eingabe" type="number" autofocus>
-<br>
-<button onclick="pruefen()">OK</button>
+<input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
 
 <div id="info"></div>
 
 <script>
-let testdauer = 20 * 60;
-let startzeit = Date.now();
+/* ------------------ Einstellungen ------------------ */
+const TESTDAUER = 20 * 60; // Sekunden
+/* --------------------------------------------------- */
 
+let startzeit = Date.now();
 let richtig = 0;
 let falsch = 0;
 let ersteRunde = true;
@@ -60,8 +62,11 @@ const info = document.getElementById("info");
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
-eingabe.addEventListener("keydown", e => {
-    if (e.key === "Enter") pruefen();
+/* Sofort prüfen bei Eingabe */
+eingabe.addEventListener("input", () => {
+    if (eingabe.value.length === 1) {
+        pruefen();
+    }
 });
 
 function zufall() {
@@ -69,11 +74,12 @@ function zufall() {
 }
 
 function pruefen() {
-    if (eingabe.value === "") return;
+    const wert = parseInt(eingabe.value);
+    if (isNaN(wert)) return;
 
     const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
 
-    if (parseInt(eingabe.value) === korrekt) {
+    if (wert === korrekt) {
         richtig++;
     } else {
         falsch++;
@@ -95,7 +101,8 @@ function pruefen() {
 
 function updateInfo() {
     const vergangen = Math.floor((Date.now() - startzeit) / 1000);
-    const rest = Math.max(0, testdauer - vergangen);
+    const rest = Math.max(0, TESTDAUER - vergangen);
+
     const min = String(Math.floor(rest / 60)).padStart(2, "0");
     const sec = String(rest % 60).padStart(2, "0");
 
@@ -103,13 +110,16 @@ function updateInfo() {
         `Zeit: ${min}:${sec} | Richtig: ${richtig} | Falsch: ${falsch}`;
 
     if (rest === 0) {
-        document.body.innerHTML =
-            `<h1>ENDE</h1>
-             <p>Richtig: ${richtig}</p>
-             <p>Falsch: ${falsch}</p>`;
+        document.body.innerHTML = `
+            <h1>ENDE</h1>
+            <p>Richtig: ${richtig}</p>
+            <p>Falsch: ${falsch}</p>
+            <p>Quote: ${((richtig / (richtig + falsch)) * 100 || 0).toFixed(1)} %</p>
+        `;
     }
 }
 
+/* Timer */
 setInterval(updateInfo, 1000);
 updateInfo();
 </script>
