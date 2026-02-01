@@ -71,13 +71,15 @@
 <div id="hint">ESC = Abbrechen</div>
 <button id="restart" onclick="location.reload()">Neu starten</button>
 
-<div id="oben" class="zahl"></div>
-<div id="plus" class="zahl">+</div>
-<div id="unten" class="zahl"></div>
+<div id="content">
+    <div id="oben" class="zahl"></div>
+    <div id="plus" class="zahl">+</div>
+    <div id="unten" class="zahl"></div>
 
-<input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
+    <input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
 
-<div id="info"></div>
+    <div id="info"></div>
+</div>
 
 <div id="statistik" style="display:none;">
     <h3>Geschwindigkeit</h3>
@@ -96,6 +98,7 @@ let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
 let eingabeZeiten = [];
 
+const content = document.getElementById("content");
 const oben = document.getElementById("oben");
 const unten = document.getElementById("unten");
 const plus = document.getElementById("plus");
@@ -167,11 +170,8 @@ function berechneBuckets() {
     return buckets;
 }
 
-/* Moving Average */
-function glaetten(werte) {
-    return werte.map((v,i,a) =>
-        i === 0 ? v : (v + a[i-1]) / 2
-    );
+function glaetten(arr) {
+    return arr.map((v,i,a) => i === 0 ? v : (v + a[i-1]) / 2);
 }
 
 function zeichneKurve(buckets) {
@@ -187,11 +187,9 @@ function zeichneKurve(buckets) {
 
     ctx.font = "bold 12px Arial";
 
-    /* Achsentitel */
     ctx.fillText("Zeit", pad, canvas.height - 10);
     ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
 
-    /* Raster X: 0,5 Min */
     ctx.strokeStyle = "#eee";
     zeiten.forEach((z,i) => {
         const x = pad + i * ((canvas.width - 2*pad) / zeiten.length);
@@ -202,7 +200,6 @@ function zeichneKurve(buckets) {
         ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
     });
 
-    /* Raster Y: 5er */
     for (let y = 0; y <= maxY + 5; y += 5) {
         const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
         ctx.beginPath();
@@ -212,7 +209,6 @@ function zeichneKurve(buckets) {
         ctx.fillText(y, canvas.width - pad + 8, py + 4);
     }
 
-    /* Linie */
     ctx.beginPath();
     ctx.strokeStyle = "#007acc";
     ctx.lineWidth = 2;
@@ -227,24 +223,16 @@ function zeichneKurve(buckets) {
 }
 
 function ende(abbruch) {
-    document.body.innerHTML = "<h2>Auswertung</h2>";
-
-    const buckets = berechneBuckets();
-    zeichneKurve(buckets);
-
-    const dauerMin = (Date.now() - startzeit) / 60000;
-    const gesamt = richtig + falsch;
-
-    document.body.innerHTML += `
+    content.innerHTML = `
+        <h2>Auswertung</h2>
         <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
         <p>Richtig: <span class="green">${richtig}</span></p>
         <p>Falsch: <span class="red">${falsch}</span></p>
-        <p>Ø Eingaben / Minute: ${(gesamt / dauerMin).toFixed(1)}</p>
+        <p>Ø Eingaben / Minute: ${((richtig+falsch)/((Date.now()-startzeit)/60000)).toFixed(1)}</p>
     `;
 
-    document.body.appendChild(statistik);
+    zeichneKurve(berechneBuckets());
 }
-
 setInterval(updateInfo, 1000);
 updateInfo();
 </script>
