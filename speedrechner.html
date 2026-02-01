@@ -36,6 +36,9 @@
         font-size: 16px;
     }
 
+    .green { color: green; }
+    .red { color: red; }
+
     canvas {
         margin-top: 30px;
         border: 1px solid #ccc;
@@ -55,7 +58,7 @@
 
 <div id="info"></div>
 
-<canvas id="chart" width="600" height="200" style="display:none;"></canvas>
+<canvas id="chart" width="800" height="300" style="display:none;"></canvas>
 
 <script>
 /* ---------------- Einstellungen ---------------- */
@@ -70,7 +73,7 @@ let ersteRunde = true;
 let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
 
-let eingabeZeiten = []; // Zeitstempel jeder Eingabe
+let eingabeZeiten = [];
 
 const oben = document.getElementById("oben");
 const unten = document.getElementById("unten");
@@ -88,7 +91,7 @@ eingabe.addEventListener("input", () => {
     if (eingabe.value.length === 1) pruefen();
 });
 
-/* ESC zum Abbrechen */
+/* ESC abbrechen */
 document.addEventListener("keydown", e => {
     if (e.key === "Escape") ende(true);
 });
@@ -127,66 +130,81 @@ function updateInfo() {
     const min = String(Math.floor(rest / 60)).padStart(2, "0");
     const sec = String(rest % 60).padStart(2, "0");
 
-    info.textContent =
-        `Zeit: ${min}:${sec} | Richtig: ${richtig} | Falsch: ${falsch}`;
+    info.innerHTML =
+        `Zeit: ${min}:${sec} | ` +
+        `Richtig: <span class="green">${richtig}</span> | ` +
+        `Falsch: <span class="red">${falsch}</span>`;
 
     if (rest === 0) ende(false);
 }
 
-function berechneStatistik() {
-    const dauerMin = (Date.now() - startzeit) / 60000;
-    const gesamt = richtig + falsch;
-    const proMinute = gesamt / dauerMin;
-
-    // Geschwindigkeiten pro Minute
+function berechneBuckets() {
     let buckets = {};
     eingabeZeiten.forEach(t => {
-        const m = Math.floor((t - startzeit) / 60000);
-        buckets[m] = (buckets[m] || 0) + 1;
+        const minute = Math.floor((t - startzeit) / 60000);
+        buckets[minute] = (buckets[minute] || 0) + 1;
     });
-
-    const werte = Object.values(buckets);
-    const avg = werte.reduce((a,b)=>a+b,0) / werte.length || 0;
-    const std = Math.sqrt(
-        werte.reduce((a,b)=>a + Math.pow(b-avg,2),0) / werte.length || 0
-    );
-
-    return { proMinute, buckets, std };
+    return buckets;
 }
 
 function zeichneKurve(buckets) {
     canvas.style.display = "block";
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    const keys = Object.keys(buckets);
-    const max = Math.max(...Object.values(buckets));
+    const minuten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+    const maxY = Math.max(...Object.values(buckets), 10);
+    const padding = 40;
 
+    /* Raster: Minuten */
+    ctx.strokeStyle = "#eee";
+    for (let i = 0; i <= minuten.length; i++) {
+        const x = padding + i * ((canvas.width - 2*padding) / minuten.length);
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, canvas.height - padding);
+        ctx.stroke();
+    }
+
+    /* Raster: 10er Schritte */
+    for (let y = 0; y <= maxY; y += 10) {
+        const py = canvas.height - padding - (y / maxY) * (canvas.height - 2*padding);
+        ctx.beginPath();
+        ctx.moveTo(padding, py);
+        ctx.lineTo(canvas.width - padding, py);
+        ctx.stroke();
+
+        ctx.fillStyle = "#555";
+        ctx.fillText(y, canvas.width - padding + 5, py + 4);
+    }
+
+    /* Linie */
     ctx.beginPath();
-    ctx.moveTo(0, canvas.height);
-
-    keys.forEach((k,i) => {
-        const x = (i / (keys.length-1)) * canvas.width;
-        const y = canvas.height - (buckets[k] / max) * canvas.height;
-        ctx.lineTo(x, y);
-    });
-
     ctx.strokeStyle = "#007acc";
     ctx.lineWidth = 2;
+
+    minuten.forEach((m,i) => {
+        const x = padding + i * ((canvas.width - 2*padding) / (minuten.length-1 || 1));
+        const y = canvas.height - padding - (buckets[m] / maxY) * (canvas.height - 2*padding);
+        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+
     ctx.stroke();
 }
 
 function ende(abbruch) {
     document.body.innerHTML = "<h2>Auswertung</h2>";
 
-    const stats = berechneStatistik();
-    zeichneKurve(stats.buckets);
+    const buckets = berechneBuckets();
+    zeichneKurve(buckets);
+
+    const dauerMin = (Date.now() - startzeit) / 60000;
+    const gesamt = richtig + falsch;
 
     document.body.innerHTML += `
         <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
-        <p>Richtig: ${richtig}</p>
-        <p>Falsch: ${falsch}</p>
-        <p>Ø Eingaben / Minute: ${stats.proMinute.toFixed(1)}</p>
-        <p>Konstanz (Streuung): ${stats.std.toFixed(2)}</p>
+        <p>Richtig: <span class="green">${richtig}</span></p>
+        <p>Falsch: <span class="red">${falsch}</span></p>
+        <p>Ø Eingaben / Minute: ${(gesamt / dauerMin).toFixed(1)}</p>
     `;
 
     document.body.appendChild(canvas);
