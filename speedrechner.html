@@ -11,12 +11,22 @@
         margin-top: 60px;
     }
 
-    #hint {
+    #hint, #restart {
         position: fixed;
-        top: 10px;
         left: 10px;
         font-size: 13px;
+    }
+
+    #hint {
+        top: 10px;
         color: #555;
+    }
+
+    #restart {
+        top: 32px;
+        padding: 6px 12px;
+        font-size: 13px;
+        cursor: pointer;
     }
 
     .zahl {
@@ -49,8 +59,8 @@
         border: 1px solid #ccc;
     }
 
-    h3 {
-        margin-top: 40px;
+    h2, h3 {
+        color: #007acc;
         font-weight: bold;
     }
 </style>
@@ -59,6 +69,7 @@
 <body>
 
 <div id="hint">ESC = Abbrechen</div>
+<button id="restart" onclick="location.reload()">Neu starten</button>
 
 <div id="oben" class="zahl"></div>
 <div id="plus" class="zahl">+</div>
@@ -69,8 +80,8 @@
 <div id="info"></div>
 
 <div id="statistik" style="display:none;">
-    <h3>Eingaben pro Minute</h3>
-    <canvas id="chart" width="900" height="320"></canvas>
+    <h3>Geschwindigkeit</h3>
+    <canvas id="chart" width="900" height="340"></canvas>
 </div>
 
 <script>
@@ -150,10 +161,17 @@ function updateInfo() {
 function berechneBuckets() {
     let buckets = {};
     eingabeZeiten.forEach(t => {
-        const halbMinute = Math.floor((t - startzeit) / 30000) / 2;
-        buckets[halbMinute] = (buckets[halbMinute] || 0) + 1;
+        const h = Math.floor((t - startzeit) / 30000) / 2;
+        buckets[h] = (buckets[h] || 0) + 1;
     });
     return buckets;
+}
+
+/* Moving Average */
+function glaetten(werte) {
+    return werte.map((v,i,a) =>
+        i === 0 ? v : (v + a[i-1]) / 2
+    );
 }
 
 function zeichneKurve(buckets) {
@@ -161,31 +179,37 @@ function zeichneKurve(buckets) {
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
     const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
-    const maxY = Math.max(...Object.values(buckets), 5);
-    const padding = 50;
+    const roh = zeiten.map(z => buckets[z]);
+    const werte = glaetten(roh);
+
+    const maxY = Math.max(...werte, 5);
+    const pad = 55;
 
     ctx.font = "bold 12px Arial";
 
-    /* Raster X: halbe Minuten */
+    /* Achsentitel */
+    ctx.fillText("Zeit", pad, canvas.height - 10);
+    ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
+
+    /* Raster X: 0,5 Min */
     ctx.strokeStyle = "#eee";
     zeiten.forEach((z,i) => {
-        const x = padding + i * ((canvas.width - 2*padding) / zeiten.length);
+        const x = pad + i * ((canvas.width - 2*pad) / zeiten.length);
         ctx.beginPath();
-        ctx.moveTo(x, padding);
-        ctx.lineTo(x, canvas.height - padding);
+        ctx.moveTo(x, pad);
+        ctx.lineTo(x, canvas.height - pad);
         ctx.stroke();
-
-        ctx.fillText(z.toFixed(1), x - 10, canvas.height - padding + 20);
+        ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
     });
 
-    /* Raster Y: 5er Schritte */
+    /* Raster Y: 5er */
     for (let y = 0; y <= maxY + 5; y += 5) {
-        const py = canvas.height - padding - (y / maxY) * (canvas.height - 2*padding);
+        const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
         ctx.beginPath();
-        ctx.moveTo(padding, py);
-        ctx.lineTo(canvas.width - padding, py);
+        ctx.moveTo(pad, py);
+        ctx.lineTo(canvas.width - pad, py);
         ctx.stroke();
-        ctx.fillText(y, canvas.width - padding + 8, py + 4);
+        ctx.fillText(y, canvas.width - pad + 8, py + 4);
     }
 
     /* Linie */
@@ -193,9 +217,9 @@ function zeichneKurve(buckets) {
     ctx.strokeStyle = "#007acc";
     ctx.lineWidth = 2;
 
-    zeiten.forEach((z,i) => {
-        const x = padding + i * ((canvas.width - 2*padding) / (zeiten.length-1 || 1));
-        const y = canvas.height - padding - (buckets[z] / maxY) * (canvas.height - 2*padding);
+    werte.forEach((v,i) => {
+        const x = pad + i * ((canvas.width - 2*pad) / (werte.length-1 || 1));
+        const y = canvas.height - pad - (v / maxY) * (canvas.height - 2*pad);
         i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     });
 
