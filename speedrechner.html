@@ -5,106 +5,100 @@
 <title>Speedrechner – Polizei GAL E2a</title>
 
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        text-align: center;
-        margin-top: 60px;
-    }
+  body{
+    font-family: Arial, sans-serif;
+    text-align:center;
+    margin-top:60px;
+  }
 
-    /* Fixed UI (immer sichtbar) */
-    #hint {
-        position: fixed;
-        left: 10px;
-        top: 10px;
-        font-size: 13px;
-        color: #555;
-    }
+  /* Fixe UI (immer sichtbar) */
+  #hint{
+    position:fixed;
+    left:10px;
+    top:10px;
+    font-size:13px;
+    color:#555;
+  }
 
-    .btn {
-        position: fixed;
-        left: 10px;
-        font-size: 13px;
-        padding: 9px 18px;          /* ~50% größer als vorher */
-        cursor: pointer;
-    }
+  .btn{
+    font-size:13px;
+    padding:9px 18px;   /* ~50% größer */
+    cursor:pointer;
+  }
 
-    #restart {
-        top: 34px;
-    }
+  #restart{
+    position:fixed;
+    left:10px;
+    top:34px;
+  }
 
-    /* PDF Button (nur in Auswertung sichtbar) */
-    #pdfBtn {
-        position: fixed;
-        right: 10px;
-        top: 10px;
-        font-size: 13px;
-        padding: 9px 18px;          /* gleiche Größe wie Neu starten */
-        cursor: pointer;
-        display: none;
-    }
+  #pdfBtn{
+    position:fixed;
+    right:10px;
+    top:10px;
+    display:none;       /* nur in Auswertung */
+  }
 
-    /* Übungs-Header */
-    #titlePractice {
-        font-weight: bold;
-        color: #7a0000;             /* dunkelrot */
-        font-size: 56px;            /* ca. 2× so groß wie "Auswertung" (28px) */
-        margin: 0 0 25px 0;         /* Abstand zu Zahlen */
-    }
+  /* Übungs-Header */
+  #titlePractice{
+    font-weight:bold;
+    color:#7a0000;      /* dunkelrot */
+    font-size:56px;     /* ca 2× "Auswertung" */
+    margin:0 0 25px 0;  /* Abstand zu Zahlen */
+  }
 
-    .zahl {
-        font-size: 60px;
-        margin: 10px;
-    }
+  .zahl{
+    font-size:60px;
+    margin:10px;
+  }
 
-    #eingabe {
-        font-size: 26px;
-        width: 70px;
-        text-align: center;
-        margin-top: 30px;
-    }
+  #eingabe{
+    font-size:26px;
+    width:70px;
+    text-align:center;
+    margin-top:30px;
+  }
 
-    #info {
-        margin-top: 30px;
-        font-size: 16px;
-    }
+  #info{
+    margin-top:30px;
+    font-size:16px;
+  }
 
-    .green { color: green; }
-    .red { color: red; }
+  .green{ color:green; }
+  .red{ color:red; }
 
-    #statistik {
-        width: 900px;
-        margin: 0 auto;
-        display: none;
-    }
+  /* Statistik zentriert */
+  #statistik{
+    width:900px;
+    margin:0 auto;
+    display:none;
+  }
 
-    canvas {
-        margin-top: 10px;
-        border: 1px solid #ccc;
-    }
+  canvas{
+    margin-top:10px;
+    border:1px solid #ccc;
+  }
 
-    h2 {
-        color: #007acc;
-        font-weight: bold;
-        font-size: 28px;
-        margin: 0 0 10px 0;
-    }
+  h2{
+    color:#007acc;
+    font-weight:bold;
+    font-size:28px;
+    margin:0 0 10px 0;
+  }
 
-    h3 {
-        color: #007acc;
-        font-weight: bold;
-        font-size: 20px;
-        margin: 0;
-    }
+  h3{
+    color:#007acc;
+    font-weight:bold;
+    font-size:20px;
+    margin:0;
+  }
 
-    /* Mehr Abstand zwischen Ø Eingaben/min und "Geschwindigkeit" */
-    #spacerStats {
-        height: 18px; /* ca. doppelt so groß wie vorher */
-    }
+  /* größerer Abstand zwischen Ø Eingaben/min und "Geschwindigkeit" */
+  #spacerStats{
+    height:18px;
+  }
 
-    /* Auswertung-Textblock */
-    #summary p {
-        margin: 8px 0;
-    }
+  #summary p{ margin:8px 0; }
 </style>
 </head>
 
@@ -112,25 +106,27 @@
 
 <div id="hint">ESC = Abbrechen</div>
 <button id="restart" class="btn" onclick="location.reload()">Neu starten</button>
-<button id="pdfBtn">Ergebnis als PDF herunterladen</button>
+<button id="pdfBtn" class="btn">Ergebnis als PDF herunterladen</button>
 
-<div id="content">
-    <div id="titlePractice">Speedrechner</div>
+<!-- Übungsbereich (wird später durch Auswertung ersetzt) -->
+<div id="practice">
+  <div id="titlePractice">Speedrechner</div>
 
-    <div id="oben" class="zahl"></div>
-    <div id="plus" class="zahl">+</div>
-    <div id="unten" class="zahl"></div>
+  <div id="oben" class="zahl"></div>
+  <div id="plus" class="zahl">+</div>
+  <div id="unten" class="zahl"></div>
 
-    <input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
-    <div id="info"></div>
+  <input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
+  <div id="info"></div>
 </div>
 
+<!-- Statistikbereich (bleibt als Block erhalten, wird nur ein-/ausgeblendet) -->
 <div id="statistik">
-    <h3>Geschwindigkeit</h3>
-    <canvas id="chart" width="900" height="340"></canvas>
+  <h3>Geschwindigkeit</h3>
+  <canvas id="chart" width="900" height="340"></canvas>
 </div>
 
-<!-- jsPDF (für PDF-Download im Browser) -->
+<!-- jsPDF (PDF Download) -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
@@ -147,46 +143,49 @@ let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
 let eingabeZeiten = [];
 
-const content = document.getElementById("content");
+const practice = document.getElementById("practice");
 const oben = document.getElementById("oben");
 const unten = document.getElementById("unten");
 const plus = document.getElementById("plus");
 const eingabe = document.getElementById("eingabe");
 const info = document.getElementById("info");
+
 const statistik = document.getElementById("statistik");
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
+
 const pdfBtn = document.getElementById("pdfBtn");
 
-let letzteAuswertung = null; // wird in ende() gesetzt
+let letzteAuswertung = null;
 
+/* Startanzeige */
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
-/* Sofort prüfen */
+/* Sofort prüfen bei 1 Ziffer */
 eingabe.addEventListener("input", () => {
   if (eingabe.value.length === 1) pruefen();
 });
 
 /* ESC abbrechen */
-document.addEventListener("keydown", e => {
+document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") ende(true);
 });
 
-function zufall() {
+function zufall(){
   return Math.floor(Math.random() * 9) + 1;
 }
 
-function pruefen() {
+function pruefen(){
   const wert = parseInt(eingabe.value);
   if (isNaN(wert)) return;
 
   eingabeZeiten.push(Date.now());
 
   const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
-  wert === korrekt ? richtig++ : falsch++;
+  (wert === korrekt) ? richtig++ : falsch++;
 
-  if (ersteRunde) {
+  if (ersteRunde){
     unten.style.display = "none";
     plus.style.display = "none";
     ersteRunde = false;
@@ -200,7 +199,7 @@ function pruefen() {
   updateInfo();
 }
 
-function updateInfo() {
+function updateInfo(){
   const vergangen = Math.floor((Date.now() - startzeit) / 1000);
   const rest = Math.max(0, TESTDAUER - vergangen);
 
@@ -215,28 +214,27 @@ function updateInfo() {
   if (rest === 0) ende(false);
 }
 
-function berechneBuckets() {
-  let buckets = {};
+/* Buckets in 0.5-Minuten */
+function berechneBuckets(){
+  const buckets = {};
   eingabeZeiten.forEach(t => {
-    const h = Math.floor((t - startzeit) / 30000) / 2; // 0.5-Minuten buckets
+    const h = Math.floor((t - startzeit) / 30000) / 2; // 0.0, 0.5, 1.0 ...
     buckets[h] = (buckets[h] || 0) + 1;
   });
   return buckets;
 }
 
 /* leichte Glättung */
-function glaetten(arr) {
-  return arr.map((v, i, a) => i === 0 ? v : (v + a[i - 1]) / 2);
+function glaetten(arr){
+  return arr.map((v,i,a) => i === 0 ? v : (v + a[i-1]) / 2);
 }
 
-/* runder zeichnen: lineJoin/lineCap + anti-aliasing */
-function zeichneKurve(buckets) {
+function zeichneKurve(buckets){
   statistik.style.display = "block";
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const zeiten = Object.keys(buckets).map(Number).sort((a, b) => a - b);
-
-  // Wenn extrem kurz: wenigstens zwei Punkte, damit Linie sichtbar wird
+  let zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  if (zeiten.length === 0) zeiten = [0];
   if (zeiten.length === 1) zeiten.push(zeiten[0] + 0.5);
 
   const roh = zeiten.map(z => buckets[z] || 0);
@@ -253,8 +251,8 @@ function zeichneKurve(buckets) {
 
   // Raster X: 0.5 Min
   ctx.strokeStyle = "#eee";
-  zeiten.forEach((z, i) => {
-    const x = pad + i * ((canvas.width - 2 * pad) / zeiten.length);
+  zeiten.forEach((z,i) => {
+    const x = pad + i * ((canvas.width - 2*pad) / zeiten.length);
     ctx.beginPath();
     ctx.moveTo(x, pad);
     ctx.lineTo(x, canvas.height - pad);
@@ -262,9 +260,9 @@ function zeichneKurve(buckets) {
     ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
   });
 
-  // Raster Y: 5er Schritte
-  for (let y = 0; y <= maxY + 5; y += 5) {
-    const py = canvas.height - pad - (y / maxY) * (canvas.height - 2 * pad);
+  // Raster Y: 5er
+  for (let y=0; y <= maxY + 5; y += 5){
+    const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
     ctx.beginPath();
     ctx.moveTo(pad, py);
     ctx.lineTo(canvas.width - pad, py);
@@ -272,34 +270,33 @@ function zeichneKurve(buckets) {
     ctx.fillText(y, canvas.width - pad + 8, py + 4);
   }
 
-  // Kurve (blau, rund)
+  // Kurve: rund
   ctx.beginPath();
   ctx.strokeStyle = "#007acc";
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  werte.forEach((v, i) => {
-    const x = pad + i * ((canvas.width - 2 * pad) / (werte.length - 1 || 1));
-    const y = canvas.height - pad - (v / maxY) * (canvas.height - 2 * pad);
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  werte.forEach((v,i) => {
+    const x = pad + i * ((canvas.width - 2*pad) / (werte.length - 1 || 1));
+    const y = canvas.height - pad - (v / maxY) * (canvas.height - 2*pad);
+    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
   });
-
   ctx.stroke();
 
-  return { zeiten, werte, maxY };
+  return {zeiten, werte, maxY};
 }
 
-function ende(abbruch) {
-  // PDF-Button sichtbar machen
+function ende(abbruch){
+  // PDF Button sichtbar
   pdfBtn.style.display = "block";
 
   const dauerMin = (Date.now() - startzeit) / 60000;
   const gesamt = richtig + falsch;
   const avgProMin = (gesamt / dauerMin) || 0;
 
-  // Auswertungs-HTML (mit extra Abstand zwischen Ø und Geschwindigkeit)
-  content.innerHTML = `
+  // Übungsbereich ersetzen (fixe Buttons bleiben!)
+  practice.innerHTML = `
     <h2>Auswertung</h2>
     <div id="summary">
       <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
@@ -313,7 +310,6 @@ function ende(abbruch) {
   const buckets = berechneBuckets();
   const chartData = zeichneKurve(buckets);
 
-  // Merken fürs PDF
   letzteAuswertung = {
     abbruch,
     richtig,
@@ -324,8 +320,13 @@ function ende(abbruch) {
   };
 }
 
+/* PDF Download */
 pdfBtn.addEventListener("click", () => {
   if (!letzteAuswertung) return;
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.");
+    return;
+  }
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "pt", format: "a4" });
@@ -342,7 +343,6 @@ pdfBtn.addEventListener("click", () => {
   doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgProMin}`, 40, 140);
   doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
 
-  // Diagramm als Bild einfügen
   const img = canvas.toDataURL("image/png", 1.0);
   doc.setFont("helvetica", "bold");
   doc.text("Geschwindigkeit (Eingaben pro Minute)", 40, 195);
@@ -351,6 +351,7 @@ pdfBtn.addEventListener("click", () => {
   doc.save("speedrechner_ergebnis.pdf");
 });
 
+/* Timer */
 setInterval(updateInfo, 1000);
 updateInfo();
 </script>
