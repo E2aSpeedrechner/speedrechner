@@ -11,22 +11,44 @@
         margin-top: 60px;
     }
 
-    #hint, #restart {
+    /* Fixed UI (immer sichtbar) */
+    #hint {
         position: fixed;
         left: 10px;
-        font-size: 13px;
-    }
-
-    #hint {
         top: 10px;
+        font-size: 13px;
         color: #555;
     }
 
-    #restart {
-        top: 32px;
-        padding: 6px 12px;
+    .btn {
+        position: fixed;
+        left: 10px;
         font-size: 13px;
+        padding: 9px 18px;          /* ~50% größer als vorher */
         cursor: pointer;
+    }
+
+    #restart {
+        top: 34px;
+    }
+
+    /* PDF Button (nur in Auswertung sichtbar) */
+    #pdfBtn {
+        position: fixed;
+        right: 10px;
+        top: 10px;
+        font-size: 13px;
+        padding: 9px 18px;          /* gleiche Größe wie Neu starten */
+        cursor: pointer;
+        display: none;
+    }
+
+    /* Übungs-Header */
+    #titlePractice {
+        font-weight: bold;
+        color: #7a0000;             /* dunkelrot */
+        font-size: 56px;            /* ca. 2× so groß wie "Auswertung" (28px) */
+        margin: 0 0 25px 0;         /* Abstand zu Zahlen */
     }
 
     .zahl {
@@ -52,6 +74,7 @@
     #statistik {
         width: 900px;
         margin: 0 auto;
+        display: none;
     }
 
     canvas {
@@ -59,9 +82,28 @@
         border: 1px solid #ccc;
     }
 
-    h2, h3 {
+    h2 {
         color: #007acc;
         font-weight: bold;
+        font-size: 28px;
+        margin: 0 0 10px 0;
+    }
+
+    h3 {
+        color: #007acc;
+        font-weight: bold;
+        font-size: 20px;
+        margin: 0;
+    }
+
+    /* Mehr Abstand zwischen Ø Eingaben/min und "Geschwindigkeit" */
+    #spacerStats {
+        height: 18px; /* ca. doppelt so groß wie vorher */
+    }
+
+    /* Auswertung-Textblock */
+    #summary p {
+        margin: 8px 0;
     }
 </style>
 </head>
@@ -69,25 +111,32 @@
 <body>
 
 <div id="hint">ESC = Abbrechen</div>
-<button id="restart" onclick="location.reload()">Neu starten</button>
+<button id="restart" class="btn" onclick="location.reload()">Neu starten</button>
+<button id="pdfBtn">Ergebnis als PDF herunterladen</button>
 
 <div id="content">
+    <div id="titlePractice">Speedrechner</div>
+
     <div id="oben" class="zahl"></div>
     <div id="plus" class="zahl">+</div>
     <div id="unten" class="zahl"></div>
 
     <input id="eingabe" type="number" maxlength="1" inputmode="numeric" autofocus>
-
     <div id="info"></div>
 </div>
 
-<div id="statistik" style="display:none;">
+<div id="statistik">
     <h3>Geschwindigkeit</h3>
     <canvas id="chart" width="900" height="340"></canvas>
 </div>
 
+<!-- jsPDF (für PDF-Download im Browser) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
 <script>
+/* ---------------- Einstellungen ---------------- */
 const TESTDAUER = 20 * 60;
+/* ----------------------------------------------- */
 
 let startzeit = Date.now();
 let richtig = 0;
@@ -107,135 +156,166 @@ const info = document.getElementById("info");
 const statistik = document.getElementById("statistik");
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
+const pdfBtn = document.getElementById("pdfBtn");
+
+let letzteAuswertung = null; // wird in ende() gesetzt
 
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
+/* Sofort prüfen */
 eingabe.addEventListener("input", () => {
-    if (eingabe.value.length === 1) pruefen();
+  if (eingabe.value.length === 1) pruefen();
 });
 
+/* ESC abbrechen */
 document.addEventListener("keydown", e => {
-    if (e.key === "Escape") ende(true);
+  if (e.key === "Escape") ende(true);
 });
 
 function zufall() {
-    return Math.floor(Math.random() * 9) + 1;
+  return Math.floor(Math.random() * 9) + 1;
 }
 
 function pruefen() {
-    const wert = parseInt(eingabe.value);
-    if (isNaN(wert)) return;
+  const wert = parseInt(eingabe.value);
+  if (isNaN(wert)) return;
 
-    eingabeZeiten.push(Date.now());
+  eingabeZeiten.push(Date.now());
 
-    const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
-    wert === korrekt ? richtig++ : falsch++;
+  const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
+  wert === korrekt ? richtig++ : falsch++;
 
-    if (ersteRunde) {
-        unten.style.display = "none";
-        plus.style.display = "none";
-        ersteRunde = false;
-    }
+  if (ersteRunde) {
+    unten.style.display = "none";
+    plus.style.display = "none";
+    ersteRunde = false;
+  }
 
-    gemerkteZahl = aktuelleZahl;
-    aktuelleZahl = zufall();
-    oben.textContent = aktuelleZahl;
+  gemerkteZahl = aktuelleZahl;
+  aktuelleZahl = zufall();
+  oben.textContent = aktuelleZahl;
 
-    eingabe.value = "";
-    updateInfo();
+  eingabe.value = "";
+  updateInfo();
 }
 
 function updateInfo() {
-    const vergangen = Math.floor((Date.now() - startzeit) / 1000);
-    const rest = Math.max(0, TESTDAUER - vergangen);
+  const vergangen = Math.floor((Date.now() - startzeit) / 1000);
+  const rest = Math.max(0, TESTDAUER - vergangen);
 
-    const min = String(Math.floor(rest / 60)).padStart(2, "0");
-    const sec = String(rest % 60).padStart(2, "0");
+  const min = String(Math.floor(rest / 60)).padStart(2, "0");
+  const sec = String(rest % 60).padStart(2, "0");
 
-    info.innerHTML =
-        `Zeit: ${min}:${sec} | ` +
-        `Richtig: <span class="green">${richtig}</span> | ` +
-        `Falsch: <span class="red">${falsch}</span>`;
+  info.innerHTML =
+    `Zeit: ${min}:${sec} | ` +
+    `Richtig: <span class="green">${richtig}</span> | ` +
+    `Falsch: <span class="red">${falsch}</span>`;
 
-    if (rest === 0) ende(false);
+  if (rest === 0) ende(false);
 }
 
 function berechneBuckets() {
-    let buckets = {};
-    eingabeZeiten.forEach(t => {
-        const h = Math.floor((t - startzeit) / 30000) / 2;
-        buckets[h] = (buckets[h] || 0) + 1;
-    });
-    return buckets;
+  let buckets = {};
+  eingabeZeiten.forEach(t => {
+    const h = Math.floor((t - startzeit) / 30000) / 2; // 0.5-Minuten buckets
+    buckets[h] = (buckets[h] || 0) + 1;
+  });
+  return buckets;
 }
 
+/* leichte Glättung */
 function glaetten(arr) {
-    return arr.map((v,i,a) => i === 0 ? v : (v + a[i-1]) / 2);
+  return arr.map((v, i, a) => i === 0 ? v : (v + a[i - 1]) / 2);
 }
 
+/* runder zeichnen: lineJoin/lineCap + anti-aliasing */
 function zeichneKurve(buckets) {
-    statistik.style.display = "block";
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+  statistik.style.display = "block";
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
-    const roh = zeiten.map(z => buckets[z]);
-    const werte = glaetten(roh);
+  const zeiten = Object.keys(buckets).map(Number).sort((a, b) => a - b);
 
-    const maxY = Math.max(...werte, 5);
-    const pad = 55;
+  // Wenn extrem kurz: wenigstens zwei Punkte, damit Linie sichtbar wird
+  if (zeiten.length === 1) zeiten.push(zeiten[0] + 0.5);
 
-    ctx.font = "bold 12px Arial";
+  const roh = zeiten.map(z => buckets[z] || 0);
+  const werte = glaetten(roh);
 
-    ctx.fillText("Zeit", pad, canvas.height - 10);
-    ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
+  const maxY = Math.max(...werte, 5);
+  const pad = 55;
 
-    ctx.strokeStyle = "#eee";
-    zeiten.forEach((z,i) => {
-        const x = pad + i * ((canvas.width - 2*pad) / zeiten.length);
-        ctx.beginPath();
-        ctx.moveTo(x, pad);
-        ctx.lineTo(x, canvas.height - pad);
-        ctx.stroke();
-        ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
-    });
+  ctx.font = "bold 12px Arial";
 
-    for (let y = 0; y <= maxY + 5; y += 5) {
-        const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
-        ctx.beginPath();
-        ctx.moveTo(pad, py);
-        ctx.lineTo(canvas.width - pad, py);
-        ctx.stroke();
-        ctx.fillText(y, canvas.width - pad + 8, py + 4);
-    }
+  // Achsentitel
+  ctx.fillText("Zeit", pad, canvas.height - 10);
+  ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
 
+  // Raster X: 0.5 Min
+  ctx.strokeStyle = "#eee";
+  zeiten.forEach((z, i) => {
+    const x = pad + i * ((canvas.width - 2 * pad) / zeiten.length);
     ctx.beginPath();
-    ctx.strokeStyle = "#007acc";
-    ctx.lineWidth = 2;
-
-    werte.forEach((v,i) => {
-        const x = pad + i * ((canvas.width - 2*pad) / (werte.length-1 || 1));
-        const y = canvas.height - pad - (v / maxY) * (canvas.height - 2*pad);
-        i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-    });
-
+    ctx.moveTo(x, pad);
+    ctx.lineTo(x, canvas.height - pad);
     ctx.stroke();
+    ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
+  });
+
+  // Raster Y: 5er Schritte
+  for (let y = 0; y <= maxY + 5; y += 5) {
+    const py = canvas.height - pad - (y / maxY) * (canvas.height - 2 * pad);
+    ctx.beginPath();
+    ctx.moveTo(pad, py);
+    ctx.lineTo(canvas.width - pad, py);
+    ctx.stroke();
+    ctx.fillText(y, canvas.width - pad + 8, py + 4);
+  }
+
+  // Kurve (blau, rund)
+  ctx.beginPath();
+  ctx.strokeStyle = "#007acc";
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  werte.forEach((v, i) => {
+    const x = pad + i * ((canvas.width - 2 * pad) / (werte.length - 1 || 1));
+    const y = canvas.height - pad - (v / maxY) * (canvas.height - 2 * pad);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+
+  ctx.stroke();
+
+  return { zeiten, werte, maxY };
 }
 
 function ende(abbruch) {
-    content.innerHTML = `
-        <h2>Auswertung</h2>
-        <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
-        <p>Richtig: <span class="green">${richtig}</span></p>
-        <p>Falsch: <span class="red">${falsch}</span></p>
-        <p>Ø Eingaben / Minute: ${((richtig+falsch)/((Date.now()-startzeit)/60000)).toFixed(1)}</p>
-    `;
+  // PDF-Button sichtbar machen
+  pdfBtn.style.display = "block";
 
-    zeichneKurve(berechneBuckets());
-}
-setInterval(updateInfo, 1000);
-updateInfo();
-</script>
+  const dauerMin = (Date.now() - startzeit) / 60000;
+  const gesamt = richtig + falsch;
+  const avgProMin = (gesamt / dauerMin) || 0;
 
-</body>
-</html>
+  // Auswertungs-HTML (mit extra Abstand zwischen Ø und Geschwindigkeit)
+  content.innerHTML = `
+    <h2>Auswertung</h2>
+    <div id="summary">
+      <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
+      <p>Richtig: <span class="green">${richtig}</span></p>
+      <p>Falsch: <span class="red">${falsch}</span></p>
+      <p>Ø Eingaben / Minute: ${avgProMin.toFixed(1)}</p>
+      <div id="spacerStats"></div>
+    </div>
+  `;
+
+  const buckets = berechneBuckets();
+  const chartData = zeichneKurve(buckets);
+
+  // Merken fürs PDF
+  letzteAuswertung = {
+    abbruch,
+    richtig,
+    falsch,
+    avgProMin: a
