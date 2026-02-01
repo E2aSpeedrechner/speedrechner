@@ -8,7 +8,15 @@
     body {
         font-family: Arial, sans-serif;
         text-align: center;
-        margin-top: 80px;
+        margin-top: 60px;
+    }
+
+    #hint {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        font-size: 13px;
+        color: #555;
     }
 
     .zahl {
@@ -24,13 +32,20 @@
     }
 
     #info {
-        margin-top: 40px;
+        margin-top: 30px;
         font-size: 16px;
+    }
+
+    canvas {
+        margin-top: 30px;
+        border: 1px solid #ccc;
     }
 </style>
 </head>
 
 <body>
+
+<div id="hint">ESC = Abbrechen</div>
 
 <div id="oben" class="zahl"></div>
 <div id="plus" class="zahl">+</div>
@@ -40,10 +55,12 @@
 
 <div id="info"></div>
 
+<canvas id="chart" width="600" height="200" style="display:none;"></canvas>
+
 <script>
-/* ------------------ Einstellungen ------------------ */
+/* ---------------- Einstellungen ---------------- */
 const TESTDAUER = 20 * 60; // Sekunden
-/* --------------------------------------------------- */
+/* ----------------------------------------------- */
 
 let startzeit = Date.now();
 let richtig = 0;
@@ -53,20 +70,27 @@ let ersteRunde = true;
 let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
 
+let eingabeZeiten = []; // Zeitstempel jeder Eingabe
+
 const oben = document.getElementById("oben");
 const unten = document.getElementById("unten");
 const plus = document.getElementById("plus");
 const eingabe = document.getElementById("eingabe");
 const info = document.getElementById("info");
+const canvas = document.getElementById("chart");
+const ctx = canvas.getContext("2d");
 
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
-/* Sofort prüfen bei Eingabe */
+/* Sofort prüfen */
 eingabe.addEventListener("input", () => {
-    if (eingabe.value.length === 1) {
-        pruefen();
-    }
+    if (eingabe.value.length === 1) pruefen();
+});
+
+/* ESC zum Abbrechen */
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") ende(true);
 });
 
 function zufall() {
@@ -77,13 +101,10 @@ function pruefen() {
     const wert = parseInt(eingabe.value);
     if (isNaN(wert)) return;
 
-    const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
+    eingabeZeiten.push(Date.now());
 
-    if (wert === korrekt) {
-        richtig++;
-    } else {
-        falsch++;
-    }
+    const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
+    wert === korrekt ? richtig++ : falsch++;
 
     if (ersteRunde) {
         unten.style.display = "none";
@@ -109,14 +130,66 @@ function updateInfo() {
     info.textContent =
         `Zeit: ${min}:${sec} | Richtig: ${richtig} | Falsch: ${falsch}`;
 
-    if (rest === 0) {
-        document.body.innerHTML = `
-            <h1>ENDE</h1>
-            <p>Richtig: ${richtig}</p>
-            <p>Falsch: ${falsch}</p>
-            <p>Quote: ${((richtig / (richtig + falsch)) * 100 || 0).toFixed(1)} %</p>
-        `;
-    }
+    if (rest === 0) ende(false);
+}
+
+function berechneStatistik() {
+    const dauerMin = (Date.now() - startzeit) / 60000;
+    const gesamt = richtig + falsch;
+    const proMinute = gesamt / dauerMin;
+
+    // Geschwindigkeiten pro Minute
+    let buckets = {};
+    eingabeZeiten.forEach(t => {
+        const m = Math.floor((t - startzeit) / 60000);
+        buckets[m] = (buckets[m] || 0) + 1;
+    });
+
+    const werte = Object.values(buckets);
+    const avg = werte.reduce((a,b)=>a+b,0) / werte.length || 0;
+    const std = Math.sqrt(
+        werte.reduce((a,b)=>a + Math.pow(b-avg,2),0) / werte.length || 0
+    );
+
+    return { proMinute, buckets, std };
+}
+
+function zeichneKurve(buckets) {
+    canvas.style.display = "block";
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const keys = Object.keys(buckets);
+    const max = Math.max(...Object.values(buckets));
+
+    ctx.beginPath();
+    ctx.moveTo(0, canvas.height);
+
+    keys.forEach((k,i) => {
+        const x = (i / (keys.length-1)) * canvas.width;
+        const y = canvas.height - (buckets[k] / max) * canvas.height;
+        ctx.lineTo(x, y);
+    });
+
+    ctx.strokeStyle = "#007acc";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+}
+
+function ende(abbruch) {
+    document.body.innerHTML = "<h2>Auswertung</h2>";
+
+    const stats = berechneStatistik();
+    zeichneKurve(stats.buckets);
+
+    document.body.innerHTML += `
+        <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
+        <p>Richtig: ${richtig}</p>
+        <p>Falsch: ${falsch}</p>
+        <p>Ø Eingaben / Minute: ${stats.proMinute.toFixed(1)}</p>
+        <p>Konstanz (Streuung): ${stats.std.toFixed(2)}</p>
+    `;
+
+    document.body.appendChild(canvas);
 }
 
 /* Timer */
