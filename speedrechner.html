@@ -318,4 +318,42 @@ function ende(abbruch) {
     abbruch,
     richtig,
     falsch,
-    avgProMin: a
+    avgProMin: avgProMin.toFixed(1),
+    dauerMin: dauerMin.toFixed(1),
+    chartData
+  };
+}
+
+pdfBtn.addEventListener("click", () => {
+  if (!letzteAuswertung) return;
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("Speedrechner – Ergebnis", 40, 50);
+
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Status: ${letzteAuswertung.abbruch ? "Abgebrochen" : "Beendet"}`, 40, 80);
+  doc.text(`Richtig: ${letzteAuswertung.richtig}`, 40, 100);
+  doc.text(`Falsch: ${letzteAuswertung.falsch}`, 40, 120);
+  doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgProMin}`, 40, 140);
+  doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
+
+  // Diagramm als Bild einfügen
+  const img = canvas.toDataURL("image/png", 1.0);
+  doc.setFont("helvetica", "bold");
+  doc.text("Geschwindigkeit (Eingaben pro Minute)", 40, 195);
+  doc.addImage(img, "PNG", 40, 210, 515, 195);
+
+  doc.save("speedrechner_ergebnis.pdf");
+});
+
+setInterval(updateInfo, 1000);
+updateInfo();
+</script>
+
+</body>
+</html>
