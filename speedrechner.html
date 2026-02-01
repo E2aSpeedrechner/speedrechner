@@ -39,9 +39,19 @@
     .green { color: green; }
     .red { color: red; }
 
+    #statistik {
+        width: 900px;
+        margin: 0 auto;
+    }
+
     canvas {
-        margin-top: 30px;
+        margin-top: 10px;
         border: 1px solid #ccc;
+    }
+
+    h3 {
+        margin-top: 40px;
+        font-weight: bold;
     }
 </style>
 </head>
@@ -58,12 +68,13 @@
 
 <div id="info"></div>
 
-<canvas id="chart" width="800" height="300" style="display:none;"></canvas>
+<div id="statistik" style="display:none;">
+    <h3>Eingaben pro Minute</h3>
+    <canvas id="chart" width="900" height="320"></canvas>
+</div>
 
 <script>
-/* ---------------- Einstellungen ---------------- */
-const TESTDAUER = 20 * 60; // Sekunden
-/* ----------------------------------------------- */
+const TESTDAUER = 20 * 60;
 
 let startzeit = Date.now();
 let richtig = 0;
@@ -72,7 +83,6 @@ let ersteRunde = true;
 
 let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
-
 let eingabeZeiten = [];
 
 const oben = document.getElementById("oben");
@@ -80,18 +90,17 @@ const unten = document.getElementById("unten");
 const plus = document.getElementById("plus");
 const eingabe = document.getElementById("eingabe");
 const info = document.getElementById("info");
+const statistik = document.getElementById("statistik");
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
 
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
-/* Sofort prüfen */
 eingabe.addEventListener("input", () => {
     if (eingabe.value.length === 1) pruefen();
 });
 
-/* ESC abbrechen */
 document.addEventListener("keydown", e => {
     if (e.key === "Escape") ende(true);
 });
@@ -141,40 +150,42 @@ function updateInfo() {
 function berechneBuckets() {
     let buckets = {};
     eingabeZeiten.forEach(t => {
-        const minute = Math.floor((t - startzeit) / 60000);
-        buckets[minute] = (buckets[minute] || 0) + 1;
+        const halbMinute = Math.floor((t - startzeit) / 30000) / 2;
+        buckets[halbMinute] = (buckets[halbMinute] || 0) + 1;
     });
     return buckets;
 }
 
 function zeichneKurve(buckets) {
-    canvas.style.display = "block";
+    statistik.style.display = "block";
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    const minuten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
-    const maxY = Math.max(...Object.values(buckets), 10);
-    const padding = 40;
+    const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+    const maxY = Math.max(...Object.values(buckets), 5);
+    const padding = 50;
 
-    /* Raster: Minuten */
+    ctx.font = "bold 12px Arial";
+
+    /* Raster X: halbe Minuten */
     ctx.strokeStyle = "#eee";
-    for (let i = 0; i <= minuten.length; i++) {
-        const x = padding + i * ((canvas.width - 2*padding) / minuten.length);
+    zeiten.forEach((z,i) => {
+        const x = padding + i * ((canvas.width - 2*padding) / zeiten.length);
         ctx.beginPath();
         ctx.moveTo(x, padding);
         ctx.lineTo(x, canvas.height - padding);
         ctx.stroke();
-    }
 
-    /* Raster: 10er Schritte */
-    for (let y = 0; y <= maxY; y += 10) {
+        ctx.fillText(z.toFixed(1), x - 10, canvas.height - padding + 20);
+    });
+
+    /* Raster Y: 5er Schritte */
+    for (let y = 0; y <= maxY + 5; y += 5) {
         const py = canvas.height - padding - (y / maxY) * (canvas.height - 2*padding);
         ctx.beginPath();
         ctx.moveTo(padding, py);
         ctx.lineTo(canvas.width - padding, py);
         ctx.stroke();
-
-        ctx.fillStyle = "#555";
-        ctx.fillText(y, canvas.width - padding + 5, py + 4);
+        ctx.fillText(y, canvas.width - padding + 8, py + 4);
     }
 
     /* Linie */
@@ -182,9 +193,9 @@ function zeichneKurve(buckets) {
     ctx.strokeStyle = "#007acc";
     ctx.lineWidth = 2;
 
-    minuten.forEach((m,i) => {
-        const x = padding + i * ((canvas.width - 2*padding) / (minuten.length-1 || 1));
-        const y = canvas.height - padding - (buckets[m] / maxY) * (canvas.height - 2*padding);
+    zeiten.forEach((z,i) => {
+        const x = padding + i * ((canvas.width - 2*padding) / (zeiten.length-1 || 1));
+        const y = canvas.height - padding - (buckets[z] / maxY) * (canvas.height - 2*padding);
         i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
     });
 
@@ -207,10 +218,9 @@ function ende(abbruch) {
         <p>Ø Eingaben / Minute: ${(gesamt / dauerMin).toFixed(1)}</p>
     `;
 
-    document.body.appendChild(canvas);
+    document.body.appendChild(statistik);
 }
 
-/* Timer */
 setInterval(updateInfo, 1000);
 updateInfo();
 </script>
