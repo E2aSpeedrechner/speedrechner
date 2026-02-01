@@ -11,7 +11,6 @@
     margin-top:60px;
   }
 
-  /* Fixe UI (immer sichtbar) */
   #hint{
     position:fixed;
     left:10px;
@@ -20,7 +19,6 @@
     color:#555;
   }
 
-  /* Buttons: jetzt etwa doppelt so groß */
   .btn{
     font-size:16px;
     padding:18px 36px;
@@ -37,10 +35,9 @@
     position:fixed;
     right:10px;
     top:10px;
-    display:none;       /* nur in Auswertung */
+    display:none;
   }
 
-  /* Übungs-Header */
   #titlePractice{
     font-weight:bold;
     color:#7a0000;
@@ -95,7 +92,6 @@
   }
 
   #spacerStats{ height:18px; }
-  #summary p{ margin:8px 0; }
 </style>
 </head>
 
@@ -124,12 +120,10 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
-/* ---------------- Einstellungen ---------------- */
-const TESTDAUER = 20 * 60;         // Sekunden
-const BUCKET_SEC = 10;             // Kurve: 10 Sekunden
-/* ----------------------------------------------- */
+const TESTDAUER = 20 * 60;
+const BUCKET_SEC = 10;
 
-let startzeit = null;              // startet bei erster Eingabe
+let startzeit = null;
 let timerStarted = false;
 
 let richtig = 0;
@@ -140,7 +134,6 @@ let aktuelleZahl = zufall();
 let gemerkteZahl = zufall();
 let eingabeZeiten = [];
 
-const practice = document.getElementById("practice");
 const oben = document.getElementById("oben");
 const unten = document.getElementById("unten");
 const plus = document.getElementById("plus");
@@ -150,21 +143,16 @@ const info = document.getElementById("info");
 const statistik = document.getElementById("statistik");
 const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
-
 const pdfBtn = document.getElementById("pdfBtn");
-let letzteAuswertung = null;
 
-/* Startanzeige */
 oben.textContent = aktuelleZahl;
 unten.textContent = gemerkteZahl;
 
-/* Sofort prüfen bei 1 Ziffer */
 eingabe.addEventListener("input", () => {
   if (eingabe.value.length === 1) pruefen();
 });
 
-/* ESC abbrechen */
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", e => {
   if (e.key === "Escape") ende(true);
 });
 
@@ -172,8 +160,8 @@ function zufall(){
   return Math.floor(Math.random() * 9) + 1;
 }
 
-function starteTimerWennNoetig(){
-  if (!timerStarted) {
+function starteTimer(){
+  if (!timerStarted){
     timerStarted = true;
     startzeit = Date.now();
   }
@@ -183,14 +171,13 @@ function pruefen(){
   const wert = parseInt(eingabe.value);
   if (isNaN(wert)) return;
 
-  starteTimerWennNoetig();
+  starteTimer();
   eingabeZeiten.push(Date.now());
 
   const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
-  (wert === korrekt) ? richtig++ : falsch++;
+  wert === korrekt ? richtig++ : falsch++;
 
   if (ersteRunde){
-    // Platz behalten, nicht verschieben:
     unten.style.visibility = "hidden";
     plus.style.visibility = "hidden";
     ersteRunde = false;
@@ -205,190 +192,109 @@ function pruefen(){
 }
 
 function updateInfo(){
-  if (!timerStarted) {
-    info.innerHTML =
-      `Zeit: 20:00 | ` +
-      `Richtig: <span class="green">${richtig}</span> | ` +
-      `Falsch: <span class="red">${falsch}</span>`;
+  if (!timerStarted){
+    info.innerHTML = `Zeit: 20:00 | Richtig: <span class="green">${richtig}</span> | Falsch: <span class="red">${falsch}</span>`;
     return;
   }
 
   const vergangen = Math.floor((Date.now() - startzeit) / 1000);
   const rest = Math.max(0, TESTDAUER - vergangen);
+  const min = String(Math.floor(rest / 60)).padStart(2,"0");
+  const sec = String(rest % 60).padStart(2,"0");
 
-  const min = String(Math.floor(rest / 60)).padStart(2, "0");
-  const sec = String(rest % 60).padStart(2, "0");
-
-  info.innerHTML =
-    `Zeit: ${min}:${sec} | ` +
-    `Richtig: <span class="green">${richtig}</span> | ` +
-    `Falsch: <span class="red">${falsch}</span>`;
-
+  info.innerHTML = `Zeit: ${min}:${sec} | Richtig: <span class="green">${richtig}</span> | Falsch: <span class="red">${falsch}</span>`;
   if (rest === 0) ende(false);
 }
 
-/* Buckets in 10-Sekunden-Intervallen:
-   key = Sekunden seit Start (0,10,20,...) */
-function berechneBuckets10s(){
+function berechneBuckets(){
   const buckets = {};
   eingabeZeiten.forEach(t => {
     const sec = Math.floor((t - startzeit) / 1000);
-    const b = Math.floor(sec / BUCKET_SEC) * BUCKET_SEC; // 0,10,20...
+    const b = Math.floor(sec / BUCKET_SEC) * BUCKET_SEC;
     buckets[b] = (buckets[b] || 0) + 1;
   });
-
-  // Lücken auffüllen, damit die Linie nicht "abbricht"
-  const keys = Object.keys(buckets).map(Number);
-  if (keys.length === 0) {
-    buckets[0] = 0;
-    buckets[BUCKET_SEC] = 0;
-  } else {
-    const maxKey = Math.max(...keys);
-    for (let k = 0; k <= maxKey; k += BUCKET_SEC) {
-      if (!(k in buckets)) buckets[k] = 0;
-    }
-  }
-
   return buckets;
 }
 
-/* leichte Glättung (Moving Average über 2 Punkte) */
-function glaetten(arr){
-  return arr.map((v,i,a) => i === 0 ? v : (v + a[i-1]) / 2);
-}
-
-function zeichneKurve10s(buckets){
+function zeichneKurve(buckets){
   statistik.style.display = "block";
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b); // Sekunden
-  const roh = zeiten.map(k => buckets[k]);
+  const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
+  const roh = zeiten.map(k => buckets[k] * (60 / BUCKET_SEC));
 
-  // Eingaben pro Minute aus 10s-Bucket hochrechnen:
-  // (x Eingaben in 10s) * 6 = pro Minute
-  const proMinRoh = roh.map(v => v * (60 / BUCKET_SEC));
-  const proMin = glaetten(proMinRoh);
-
-  const maxY = Math.max(...proMin, 5);
+  const maxY = Math.max(...roh, 10);
   const pad = 55;
 
   ctx.font = "bold 12px Arial";
 
-  // Achsentitel
-  ctx.fillText("Zeit", pad, canvas.height - 10);
-  ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
+  /* Achsentitel */
+  ctx.fillText("Zeit (Minute)", pad, canvas.height - 10);
+  ctx.fillText("Eingaben / Minute", canvas.width - 170, pad - 20);
 
-  // Raster X: alle 10s, Beschriftung alle 30s (übersichtlicher)
+  /* X Raster (Beschriftung alle 30s) */
   ctx.strokeStyle = "#eee";
-  zeiten.forEach((sec,i) => {
-    const x = pad + i * ((canvas.width - 2*pad) / (zeiten.length - 1 || 1));
+  zeiten.forEach((sec,i)=>{
+    const x = pad + i * ((canvas.width - 2*pad) / (zeiten.length-1||1));
     ctx.beginPath();
-    ctx.moveTo(x, pad);
-    ctx.lineTo(x, canvas.height - pad);
+    ctx.moveTo(x,pad);
+    ctx.lineTo(x,canvas.height-pad);
     ctx.stroke();
 
-    if (sec % 30 === 0) {
-      const label = (sec / 60).toFixed(1); // Minuten als 0.0, 0.5, 1.0 ...
-      ctx.fillText(label, x - 10, canvas.height - pad + 18);
+    if (sec % 30 === 0){
+      ctx.fillText((sec/60).toFixed(1), x-10, canvas.height-pad+18);
     }
   });
 
-  // Raster Y: 5er Schritte
-  for (let y=0; y <= maxY + 5; y += 5){
-    const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
+  /* Y Raster (10er Schritte) */
+  for (let y=0; y<=maxY+10; y+=10){
+    const py = canvas.height-pad-(y/maxY)*(canvas.height-2*pad);
     ctx.beginPath();
-    ctx.moveTo(pad, py);
-    ctx.lineTo(canvas.width - pad, py);
+    ctx.moveTo(pad,py);
+    ctx.lineTo(canvas.width-pad,py);
     ctx.stroke();
-    ctx.fillText(y, canvas.width - pad + 8, py + 4);
+    ctx.fillText(y, canvas.width-pad+8, py+4);
   }
 
-  // Kurve (rund)
+  /* Kurve */
   ctx.beginPath();
-  ctx.strokeStyle = "#007acc";
-  ctx.lineWidth = 2;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
+  ctx.strokeStyle="#007acc";
+  ctx.lineWidth=2;
+  ctx.lineJoin="round";
+  ctx.lineCap="round";
 
-  proMin.forEach((v,i) => {
-    const x = pad + i * ((canvas.width - 2*pad) / (proMin.length - 1 || 1));
-    const y = canvas.height - pad - (v / maxY) * (canvas.height - 2*pad);
-    i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  roh.forEach((v,i)=>{
+    const x = pad + i * ((canvas.width - 2*pad) / (roh.length-1||1));
+    const y = canvas.height-pad-(v/maxY)*(canvas.height-2*pad);
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
   });
   ctx.stroke();
-
-  return { zeiten, proMin, maxY };
 }
 
 function ende(abbruch){
-  if (!timerStarted) {
+  if (!timerStarted){
     timerStarted = true;
     startzeit = Date.now();
   }
 
-  pdfBtn.style.display = "block";
+  pdfBtn.style.display="block";
 
-  const dauerMin = (Date.now() - startzeit) / 60000;
-  const gesamt = richtig + falsch;
-  const avgProMin = (gesamt / Math.max(dauerMin, 1/60)) || 0;
+  const dauerMin = (Date.now()-startzeit)/60000;
+  const avg = (richtig+falsch)/Math.max(dauerMin,1/60);
 
-  practice.innerHTML = `
+  document.getElementById("practice").innerHTML = `
     <h2>Auswertung</h2>
-    <div id="summary">
-      <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
-      <p>Richtig: <span class="green">${richtig}</span></p>
-      <p>Falsch: <span class="red">${falsch}</span></p>
-      <p>Ø Eingaben / Minute: ${avgProMin.toFixed(1)}</p>
-      <div id="spacerStats"></div>
-    </div>
+    <p>${abbruch?"Abgebrochen":"Beendet"}</p>
+    <p>Richtig: <span class="green">${richtig}</span></p>
+    <p>Falsch: <span class="red">${falsch}</span></p>
+    <p>Ø Eingaben / Minute: ${avg.toFixed(1)}</p>
+    <div id="spacerStats"></div>
   `;
 
-  const buckets = berechneBuckets10s();
-  const chartData = zeichneKurve10s(buckets);
-
-  letzteAuswertung = {
-    abbruch,
-    richtig,
-    falsch,
-    avgProMin: avgProMin.toFixed(1),
-    dauerMin: dauerMin.toFixed(1),
-    chartData
-  };
+  zeichneKurve(berechneBuckets());
 }
 
-/* PDF Download */
-pdfBtn.addEventListener("click", () => {
-  if (!letzteAuswertung) return;
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.");
-    return;
-  }
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "pt", format: "a4" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("Speedrechner – Ergebnis", 40, 50);
-
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text(`Status: ${letzteAuswertung.abbruch ? "Abgebrochen" : "Beendet"}`, 40, 80);
-  doc.text(`Richtig: ${letzteAuswertung.richtig}`, 40, 100);
-  doc.text(`Falsch: ${letzteAuswertung.falsch}`, 40, 120);
-  doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgProMin}`, 40, 140);
-  doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
-
-  const img = canvas.toDataURL("image/png", 1.0);
-  doc.setFont("helvetica", "bold");
-  doc.text("Geschwindigkeit (Eingaben pro Minute)", 40, 195);
-  doc.addImage(img, "PNG", 40, 210, 515, 195);
-
-  doc.save("speedrechner_ergebnis.pdf");
-});
-
-/* Timer */
-setInterval(updateInfo, 1000);
+setInterval(updateInfo,1000);
 updateInfo();
 </script>
 
