@@ -20,9 +20,10 @@
     color:#555;
   }
 
+  /* Buttons: jetzt etwa doppelt so groß */
   .btn{
-    font-size:13px;
-    padding:9px 18px;   /* ~50% größer */
+    font-size:16px;
+    padding:18px 36px;
     cursor:pointer;
   }
 
@@ -42,9 +43,9 @@
   /* Übungs-Header */
   #titlePractice{
     font-weight:bold;
-    color:#7a0000;      /* dunkelrot */
-    font-size:56px;     /* ca 2× "Auswertung" */
-    margin:0 0 50px 0;  /* Abstand zu Zahlen: verdoppelt */
+    color:#7a0000;
+    font-size:56px;
+    margin:0 0 50px 0;
   }
 
   .zahl{
@@ -62,13 +63,12 @@
   #info{
     margin-top:30px;
     font-size:16px;
-    min-height: 22px;   /* stabilisiert Zeilenhöhe */
+    min-height:22px;
   }
 
   .green{ color:green; }
   .red{ color:red; }
 
-  /* Statistik zentriert */
   #statistik{
     width:900px;
     margin:0 auto;
@@ -94,11 +94,7 @@
     margin:0;
   }
 
-  /* größerer Abstand zwischen Ø Eingaben/min und "Geschwindigkeit" */
-  #spacerStats{
-    height:18px;
-  }
-
+  #spacerStats{ height:18px; }
   #summary p{ margin:8px 0; }
 </style>
 </head>
@@ -109,7 +105,6 @@
 <button id="restart" class="btn" onclick="location.reload()">Neu starten</button>
 <button id="pdfBtn" class="btn">Ergebnis als PDF herunterladen</button>
 
-<!-- Übungsbereich (wird später durch Auswertung ersetzt) -->
 <div id="practice">
   <div id="titlePractice">Speedrechner</div>
 
@@ -121,22 +116,20 @@
   <div id="info"></div>
 </div>
 
-<!-- Statistikbereich -->
 <div id="statistik">
   <h3>Geschwindigkeit</h3>
   <canvas id="chart" width="900" height="340"></canvas>
 </div>
 
-<!-- jsPDF (PDF Download) -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
 /* ---------------- Einstellungen ---------------- */
-const TESTDAUER = 20 * 60; // Sekunden
+const TESTDAUER = 20 * 60;         // Sekunden
+const BUCKET_SEC = 10;             // Kurve: 10 Sekunden
 /* ----------------------------------------------- */
 
-// Timer startet erst nach erster Eingabe:
-let startzeit = null;          // null = noch nicht gestartet
+let startzeit = null;              // startet bei erster Eingabe
 let timerStarted = false;
 
 let richtig = 0;
@@ -159,7 +152,6 @@ const canvas = document.getElementById("chart");
 const ctx = canvas.getContext("2d");
 
 const pdfBtn = document.getElementById("pdfBtn");
-
 let letzteAuswertung = null;
 
 /* Startanzeige */
@@ -191,17 +183,14 @@ function pruefen(){
   const wert = parseInt(eingabe.value);
   if (isNaN(wert)) return;
 
-  // Timer beginnt erst ab der ersten Eingabe
   starteTimerWennNoetig();
-
   eingabeZeiten.push(Date.now());
 
   const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
   (wert === korrekt) ? richtig++ : falsch++;
 
   if (ersteRunde){
-    // WICHTIG: Nicht display:none (würde Layout verschieben),
-    // sondern visibility:hidden (behält Platz, verschiebt nichts)
+    // Platz behalten, nicht verschieben:
     unten.style.visibility = "hidden";
     plus.style.visibility = "hidden";
     ersteRunde = false;
@@ -216,7 +205,6 @@ function pruefen(){
 }
 
 function updateInfo(){
-  // Vor dem Start: volle Zeit anzeigen, aber NICHT runterzählen
   if (!timerStarted) {
     info.innerHTML =
       `Zeit: 20:00 | ` +
@@ -239,33 +227,49 @@ function updateInfo(){
   if (rest === 0) ende(false);
 }
 
-/* Buckets in 0.5-Minuten */
-function berechneBuckets(){
+/* Buckets in 10-Sekunden-Intervallen:
+   key = Sekunden seit Start (0,10,20,...) */
+function berechneBuckets10s(){
   const buckets = {};
   eingabeZeiten.forEach(t => {
-    const h = Math.floor((t - startzeit) / 30000) / 2; // 0.0, 0.5, 1.0 ...
-    buckets[h] = (buckets[h] || 0) + 1;
+    const sec = Math.floor((t - startzeit) / 1000);
+    const b = Math.floor(sec / BUCKET_SEC) * BUCKET_SEC; // 0,10,20...
+    buckets[b] = (buckets[b] || 0) + 1;
   });
+
+  // Lücken auffüllen, damit die Linie nicht "abbricht"
+  const keys = Object.keys(buckets).map(Number);
+  if (keys.length === 0) {
+    buckets[0] = 0;
+    buckets[BUCKET_SEC] = 0;
+  } else {
+    const maxKey = Math.max(...keys);
+    for (let k = 0; k <= maxKey; k += BUCKET_SEC) {
+      if (!(k in buckets)) buckets[k] = 0;
+    }
+  }
+
   return buckets;
 }
 
-/* leichte Glättung */
+/* leichte Glättung (Moving Average über 2 Punkte) */
 function glaetten(arr){
   return arr.map((v,i,a) => i === 0 ? v : (v + a[i-1]) / 2);
 }
 
-function zeichneKurve(buckets){
+function zeichneKurve10s(buckets){
   statistik.style.display = "block";
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  let zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
-  if (zeiten.length === 0) zeiten = [0];
-  if (zeiten.length === 1) zeiten.push(zeiten[0] + 0.5);
+  const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b); // Sekunden
+  const roh = zeiten.map(k => buckets[k]);
 
-  const roh = zeiten.map(z => buckets[z] || 0);
-  const werte = glaetten(roh);
+  // Eingaben pro Minute aus 10s-Bucket hochrechnen:
+  // (x Eingaben in 10s) * 6 = pro Minute
+  const proMinRoh = roh.map(v => v * (60 / BUCKET_SEC));
+  const proMin = glaetten(proMinRoh);
 
-  const maxY = Math.max(...werte, 5);
+  const maxY = Math.max(...proMin, 5);
   const pad = 55;
 
   ctx.font = "bold 12px Arial";
@@ -274,18 +278,22 @@ function zeichneKurve(buckets){
   ctx.fillText("Zeit", pad, canvas.height - 10);
   ctx.fillText("Eingaben / Minute", canvas.width - 160, pad - 20);
 
-  // Raster X: 0.5 Min
+  // Raster X: alle 10s, Beschriftung alle 30s (übersichtlicher)
   ctx.strokeStyle = "#eee";
-  zeiten.forEach((z,i) => {
-    const x = pad + i * ((canvas.width - 2*pad) / zeiten.length);
+  zeiten.forEach((sec,i) => {
+    const x = pad + i * ((canvas.width - 2*pad) / (zeiten.length - 1 || 1));
     ctx.beginPath();
     ctx.moveTo(x, pad);
     ctx.lineTo(x, canvas.height - pad);
     ctx.stroke();
-    ctx.fillText(z.toFixed(1), x - 10, canvas.height - pad + 18);
+
+    if (sec % 30 === 0) {
+      const label = (sec / 60).toFixed(1); // Minuten als 0.0, 0.5, 1.0 ...
+      ctx.fillText(label, x - 10, canvas.height - pad + 18);
+    }
   });
 
-  // Raster Y: 5er
+  // Raster Y: 5er Schritte
   for (let y=0; y <= maxY + 5; y += 5){
     const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
     ctx.beginPath();
@@ -295,38 +303,35 @@ function zeichneKurve(buckets){
     ctx.fillText(y, canvas.width - pad + 8, py + 4);
   }
 
-  // Kurve: rund
+  // Kurve (rund)
   ctx.beginPath();
   ctx.strokeStyle = "#007acc";
   ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
 
-  werte.forEach((v,i) => {
-    const x = pad + i * ((canvas.width - 2*pad) / (werte.length - 1 || 1));
+  proMin.forEach((v,i) => {
+    const x = pad + i * ((canvas.width - 2*pad) / (proMin.length - 1 || 1));
     const y = canvas.height - pad - (v / maxY) * (canvas.height - 2*pad);
     i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
   });
   ctx.stroke();
 
-  return {zeiten, werte, maxY};
+  return { zeiten, proMin, maxY };
 }
 
 function ende(abbruch){
-  // Wenn noch nie gestartet wurde: Auswertung trotzdem anzeigen (Zeit = 0)
   if (!timerStarted) {
     timerStarted = true;
     startzeit = Date.now();
   }
 
-  // PDF Button sichtbar
   pdfBtn.style.display = "block";
 
   const dauerMin = (Date.now() - startzeit) / 60000;
   const gesamt = richtig + falsch;
-  const avgProMin = (gesamt / Math.max(dauerMin, 1/60)) || 0; // Schutz vor 0
+  const avgProMin = (gesamt / Math.max(dauerMin, 1/60)) || 0;
 
-  // Übungsbereich ersetzen (fixe Buttons bleiben!)
   practice.innerHTML = `
     <h2>Auswertung</h2>
     <div id="summary">
@@ -338,8 +343,8 @@ function ende(abbruch){
     </div>
   `;
 
-  const buckets = berechneBuckets();
-  const chartData = zeichneKurve(buckets);
+  const buckets = berechneBuckets10s();
+  const chartData = zeichneKurve10s(buckets);
 
   letzteAuswertung = {
     abbruch,
