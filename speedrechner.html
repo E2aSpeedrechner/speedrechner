@@ -120,8 +120,9 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 
 <script>
-const TESTDAUER = 20 * 60;
-const BUCKET_SEC = 10;
+const TESTDAUER = 20 * 60;    // 1200s
+const BUCKET_SEC = 10;        // 10s Auflösung
+const TOTAL_SEC = TESTDAUER;  // für Klarheit
 
 let startzeit = null;
 let timerStarted = false;
@@ -199,6 +200,7 @@ function updateInfo(){
 
   const vergangen = Math.floor((Date.now() - startzeit) / 1000);
   const rest = Math.max(0, TESTDAUER - vergangen);
+
   const min = String(Math.floor(rest / 60)).padStart(2,"0");
   const sec = String(rest % 60).padStart(2,"0");
 
@@ -206,97 +208,98 @@ function updateInfo(){
   if (rest === 0) ende(false);
 }
 
-function berechneBuckets(){
-  const buckets = {};
-  eingabeZeiten.forEach(t => {
-    const sec = Math.floor((t - startzeit) / 1000);
-    const b = Math.floor(sec / BUCKET_SEC) * BUCKET_SEC;
-    buckets[b] = (buckets[b] || 0) + 1;
-  });
-  return buckets;
+/* erzeugt IMMER volle 20 Minuten in 10s-Buckets (0..1200) */
+function berechneSpeedSerie(abbruch){
+  // 0..1200 in 10s Schritten => 121 Punkte
+  const keys = [];
+  for (let s = 0; s <= TOTAL_SEC; s += BUCKET_SEC) keys.push(s);
+
+  // counts pro bucket
+  const counts = {};
+  keys.forEach(k => counts[k] = 0);
+
+  if (timerStarted && eingabeZeiten.length > 0){
+    for (const t of eingabeZeiten){
+      const sec = Math.floor((t - startzeit) / 1000);
+      const b = Math.min(TOTAL_SEC, Math.floor(sec / BUCKET_SEC) * BUCKET_SEC);
+      counts[b] = (counts[b] || 0) + 1;
+    }
+  }
+
+  // pro Minute hochrechnen
+  const speed = keys.map(k => (counts[k] || 0) * (60 / BUCKET_SEC));
+
+  // Wenn abgebrochen: ab letzter Eingabe waagrecht bis Ende
+  if (abbruch && timerStarted && eingabeZeiten.length > 0){
+    const lastInputSec = Math.min(TOTAL_SEC, Math.floor((Math.max(...eingabeZeiten) - startzeit) / 1000));
+    const lastBucket = Math.floor(lastInputSec / BUCKET_SEC) * BUCKET_SEC;
+    const lastIdx = keys.indexOf(lastBucket);
+    const lastSpeed = speed[lastIdx] ?? 0;
+
+    for (let i = lastIdx + 1; i < speed.length; i++){
+      speed[i] = lastSpeed;
+    }
+  }
+
+  return { keys, speed };
 }
 
-function zeichneKurve(buckets){
+function zeichneKurve(keys, speed){
   statistik.style.display = "block";
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const zeiten = Object.keys(buckets).map(Number).sort((a,b)=>a-b);
-  const roh = zeiten.map(k => buckets[k] * (60 / BUCKET_SEC));
-
-  const maxY = Math.max(...roh, 10);
   const pad = 55;
+
+  // maxY runden (für schönere Achse) – mindestens 10
+  let maxY = Math.max(...speed, 10);
+  maxY = Math.ceil(maxY / 10) * 10;
 
   ctx.font = "bold 12px Arial";
 
-  /* Achsentitel */
+  // Achsentitel
   ctx.fillText("Zeit (Minute)", pad, canvas.height - 10);
   ctx.fillText("Eingaben / Minute", canvas.width - 170, pad - 20);
 
-  /* X Raster (Beschriftung alle 30s) */
+  // X Raster: alle 10s, Labels nur jede 1 Minute
   ctx.strokeStyle = "#eee";
-  zeiten.forEach((sec,i)=>{
-    const x = pad + i * ((canvas.width - 2*pad) / (zeiten.length-1||1));
+  for (let i = 0; i < keys.length; i++){
+    const sec = keys[i];
+    const x = pad + i * ((canvas.width - 2*pad) / (keys.length - 1));
+
     ctx.beginPath();
-    ctx.moveTo(x,pad);
-    ctx.lineTo(x,canvas.height-pad);
+    ctx.moveTo(x, pad);
+    ctx.lineTo(x, canvas.height - pad);
     ctx.stroke();
 
-    if (sec % 30 === 0){
-      ctx.fillText((sec/60).toFixed(1), x-10, canvas.height-pad+18);
+    if (sec % 60 === 0){
+      ctx.fillText(String(sec / 60), x - 4, canvas.height - pad + 18);
     }
-  });
-
-  /* Y Raster (10er Schritte) */
-  for (let y=0; y<=maxY+10; y+=10){
-    const py = canvas.height-pad-(y/maxY)*(canvas.height-2*pad);
-    ctx.beginPath();
-    ctx.moveTo(pad,py);
-    ctx.lineTo(canvas.width-pad,py);
-    ctx.stroke();
-    ctx.fillText(y, canvas.width-pad+8, py+4);
   }
 
-  /* Kurve */
+  // Y Raster: 10er Schritte (übersichtlich)
+  for (let y=0; y<=maxY; y+=10){
+    const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
+    ctx.beginPath();
+    ctx.moveTo(pad, py);
+    ctx.lineTo(canvas.width - pad, py);
+    ctx.stroke();
+    ctx.fillText(y, canvas.width - pad + 8, py + 4);
+  }
+
+  // Kurve
   ctx.beginPath();
   ctx.strokeStyle="#007acc";
   ctx.lineWidth=2;
   ctx.lineJoin="round";
   ctx.lineCap="round";
 
-  roh.forEach((v,i)=>{
-    const x = pad + i * ((canvas.width - 2*pad) / (roh.length-1||1));
-    const y = canvas.height-pad-(v/maxY)*(canvas.height-2*pad);
-    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  });
+  for (let i = 0; i < speed.length; i++){
+    const x = pad + i * ((canvas.width - 2*pad) / (speed.length - 1));
+    const y = canvas.height - pad - (speed[i] / maxY) * (canvas.height - 2*pad);
+    if (i === 0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
   ctx.stroke();
 }
 
-function ende(abbruch){
-  if (!timerStarted){
-    timerStarted = true;
-    startzeit = Date.now();
-  }
-
-  pdfBtn.style.display="block";
-
-  const dauerMin = (Date.now()-startzeit)/60000;
-  const avg = (richtig+falsch)/Math.max(dauerMin,1/60);
-
-  document.getElementById("practice").innerHTML = `
-    <h2>Auswertung</h2>
-    <p>${abbruch?"Abgebrochen":"Beendet"}</p>
-    <p>Richtig: <span class="green">${richtig}</span></p>
-    <p>Falsch: <span class="red">${falsch}</span></p>
-    <p>Ø Eingaben / Minute: ${avg.toFixed(1)}</p>
-    <div id="spacerStats"></div>
-  `;
-
-  zeichneKurve(berechneBuckets());
-}
-
-setInterval(updateInfo,1000);
-updateInfo();
-</script>
-
-</body>
-</html>
+function ende(abbruch
