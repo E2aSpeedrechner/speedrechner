@@ -131,7 +131,7 @@
 
   <div id="legend">
     <div class="legend-item"><span class="swatch" style="background:#007acc;"></span>Tempo / Minute</div>
-    <div class="legend-item"><span class="swatch" style="background:#e67e22;"></span>Gleitender Gesamtdurchschnitt</div>
+    <div class="legend-item"><span class="swatch" style="background:#e67e22;"></span>Gesamtdurchschnitt</div>
   </div>
 </div>
 
@@ -172,7 +172,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return Math.floor(Math.random() * 9) + 1;
   }
 
-  // ✅ Robuste Initialisierung – damit Zahlen garantiert sichtbar sind
+  // Robuste Initialisierung
   function initAufgabe(){
     aktuelleZahl = zufall();
     gemerkteZahl = zufall();
@@ -216,7 +216,6 @@ document.addEventListener("DOMContentLoaded", () => {
     (wert === korrekt) ? richtig++ : falsch++;
 
     if (ersteRunde){
-      // unsichtbar, aber Platz bleibt → kein Springen
       unten.style.visibility = "hidden";
       plus.style.visibility = "hidden";
       ersteRunde = false;
@@ -253,9 +252,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (rest === 0) ende(false);
   }
 
-  // ===== Statistik pro Minute (ruhig) =====
-  function berechneSerienProMinute(abbruch){
-    const minutes = Array.from({length: TOTAL_MIN}, (_, i) => i);
+  // ===== Statistik pro Minute =====
+  function berechneTempoProMinute(abbruch){
     const counts = new Array(TOTAL_MIN).fill(0);
 
     if (timerStarted && eingabeZeiten.length > 0){
@@ -269,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Tempo pro Minute
     const speed = counts.slice();
 
-    // Abbruch: ab letzter Minute waagrecht bis Minute 20
+    // Abbruch: ab letzter Minute waagrecht bis Minute 20 fortführen
     if (abbruch && timerStarted && eingabeZeiten.length > 0){
       const lastSec = Math.floor((Math.max(...eingabeZeiten) - startzeit) / 1000);
       const lastMin = Math.min(TOTAL_MIN - 1, Math.floor(lastSec / 60));
@@ -279,15 +277,11 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // gleitender Gesamtdurchschnitt = kumulativer Durchschnitt
-    const cumAvg = [];
-    let sum = 0;
-    for (let i = 0; i < speed.length; i++){
-      sum += speed[i];
-      cumAvg.push(sum / (i + 1));
-    }
+    // Gesamtdurchschnitt über alle 20 Minuten (inkl. fortgeführter Werte)
+    const sum = speed.reduce((a,b)=>a+b,0);
+    const avg = sum / TOTAL_MIN;
 
-    return { minutes, speed, cumAvg };
+    return { speed, avg };
   }
 
   function drawSmoothLine(points, color){
@@ -315,7 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.stroke();
   }
 
-  function zeichneKurven(minutes, speed, cumAvg){
+  function zeichneKurven(speed, avg){
     statistik.style.display = "block";
     ctx.clearRect(0,0,canvas.width,canvas.height);
 
@@ -323,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const w = canvas.width - 2 * pad;
     const h = canvas.height - 2 * pad;
 
-    let maxY = Math.max(...speed, ...cumAvg, 10);
+    let maxY = Math.max(...speed, avg, 10);
     maxY = Math.ceil(maxY / 10) * 10;
 
     ctx.font = "bold 12px Arial";
@@ -354,23 +348,27 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.fillText(String(y), pad + w + 8, py + 4);
     }
 
-    // Punkte: 20 Werte (Minute 0..19) über ganze Breite
+    // Tempo-Punkte (20 Werte)
     const ptsSpeed = speed.map((v,i) => ({
       x: pad + (i / (TOTAL_MIN - 1)) * w,
       y: pad + h - (v / maxY) * h
     }));
 
-    const ptsAvg = cumAvg.map((v,i) => ({
-      x: pad + (i / (TOTAL_MIN - 1)) * w,
-      y: pad + h - (v / maxY) * h
-    }));
-
+    // 1) Tempo-Linie (blau, weich)
     drawSmoothLine(ptsSpeed, "#007acc");
-    drawSmoothLine(ptsAvg, "#e67e22");
+
+    // 2) Gesamtdurchschnitt als horizontale Linie (orange, durchgehend)
+    const yAvg = pad + h - (avg / maxY) * h;
+    ctx.beginPath();
+    ctx.strokeStyle = "#e67e22";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.moveTo(pad, yAvg);
+    ctx.lineTo(pad + w, yAvg);
+    ctx.stroke();
   }
 
   function ende(abbruch){
-    // wenn nie gestartet: trotzdem Auswertung möglich
     if (!timerStarted){
       timerStarted = true;
       startzeit = Date.now();
@@ -379,25 +377,25 @@ document.addEventListener("DOMContentLoaded", () => {
     pdfBtn.style.display = "block";
 
     const dauerMin = (Date.now() - startzeit) / 60000;
-    const avgAll = (richtig + falsch) / Math.max(dauerMin, 1/60);
+    const avgAllReal = (richtig + falsch) / Math.max(dauerMin, 1/60);
 
     practice.innerHTML = `
       <h2>Auswertung</h2>
       <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
       <p>Richtig: <span class="green">${richtig}</span></p>
       <p>Falsch: <span class="red">${falsch}</span></p>
-      <p>Ø Eingaben / Minute: ${avgAll.toFixed(1)}</p>
+      <p>Ø Eingaben / Minute: ${avgAllReal.toFixed(1)}</p>
       <div id="spacerStats"></div>
     `;
 
-    const { minutes, speed, cumAvg } = berechneSerienProMinute(abbruch);
-    zeichneKurven(minutes, speed, cumAvg);
+    const { speed, avg } = berechneTempoProMinute(abbruch);
+    zeichneKurven(speed, avg);
 
     letzteAuswertung = {
       abbruch,
       richtig,
       falsch,
-      avgAll: avgAll.toFixed(1),
+      avgAllReal: avgAllReal.toFixed(1),
       dauerMin: dauerMin.toFixed(1)
     };
   }
@@ -422,7 +420,7 @@ document.addEventListener("DOMContentLoaded", () => {
     doc.text(`Status: ${letzteAuswertung.abbruch ? "Abgebrochen" : "Beendet"}`, 40, 80);
     doc.text(`Richtig: ${letzteAuswertung.richtig}`, 40, 100);
     doc.text(`Falsch: ${letzteAuswertung.falsch}`, 40, 120);
-    doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgAll}`, 40, 140);
+    doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgAllReal}`, 40, 140);
     doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
 
     const img = canvas.toDataURL("image/png", 1.0);
