@@ -50,7 +50,7 @@
   .zahl{
     font-size:60px;
     margin:10px;
-    min-height: 72px; /* sorgt dafür, dass auch leere Felder Platz halten */
+    min-height:72px; /* stabilisiert Layout */
   }
 
   #eingabe{
@@ -95,6 +95,28 @@
   }
 
   #spacerStats{ height:18px; }
+
+  /* Legende */
+  #legend{
+    margin-top:8px;
+    font-size:14px;
+    font-weight:bold;
+    display:flex;
+    justify-content:center;
+    gap:18px;
+    align-items:center;
+  }
+  .legend-item{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .swatch{
+    width:18px;
+    height:4px;
+    border-radius:2px;
+    display:inline-block;
+  }
 </style>
 </head>
 
@@ -107,7 +129,6 @@
 <div id="practice">
   <div id="titlePractice">Speedrechner</div>
 
-  <!-- Rechenbereich (immer unterhalb der Überschrift) -->
   <div id="oben" class="zahl"></div>
   <div id="plus" class="zahl">+</div>
   <div id="unten" class="zahl"></div>
@@ -119,6 +140,11 @@
 <div id="statistik">
   <h3>Geschwindigkeit</h3>
   <canvas id="chart" width="900" height="340"></canvas>
+
+  <div id="legend">
+    <div class="legend-item"><span class="swatch" style="background:#007acc;"></span>Tempo pro Minute</div>
+    <div class="legend-item"><span class="swatch" style="background:#e67e22;"></span>Gleitender Gesamtdurchschnitt</div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
@@ -126,8 +152,8 @@
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   /* ---------------- Einstellungen ---------------- */
-  const TESTDAUER = 20 * 60;   // 1200s
-  const BUCKET_SEC = 10;       // 10s-Auflösung
+  const TESTDAUER_SEC = 20 * 60;     // 1200 Sekunden
+  const TOTAL_MIN = 20;             // immer 20 Minuten im Diagramm
   /* ----------------------------------------------- */
 
   // Timer startet erst ab erster Eingabe
@@ -156,13 +182,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let letzteAuswertung = null;
 
-  // Sicherstellen, dass der Aufgabenblock sichtbar ist (falls Browser cached)
+  // Sicher initial sichtbar
   plus.style.visibility = "visible";
   unten.style.visibility = "visible";
   plus.style.display = "block";
   unten.style.display = "block";
 
-  // Initialanzeige (DAS ist der Teil, der vorher wegen Fehlern oft nicht lief)
+  // Initialanzeige
   oben.textContent = String(aktuelleZahl);
   unten.textContent = String(gemerkteZahl);
 
@@ -197,14 +223,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
     (wert === korrekt) ? richtig++ : falsch++;
 
-    // Nach erster Eingabe: untere Zahl + Plus unsichtbar, aber Platz bleibt -> kein Springen
+    // nach erster Eingabe: unsichtbar, aber Platz bleibt (kein Springen)
     if (ersteRunde){
       unten.style.visibility = "hidden";
       plus.style.visibility = "hidden";
       ersteRunde = false;
     }
 
-    // Nächste Aufgabe: neue sichtbare Zahl, gemerkte Zahl = vorherige sichtbare
     gemerkteZahl = aktuelleZahl;
     aktuelleZahl = zufall();
     oben.textContent = String(aktuelleZahl);
@@ -223,7 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const vergangen = Math.floor((Date.now() - startzeit) / 1000);
-    const rest = Math.max(0, TESTDAUER - vergangen);
+    const rest = Math.max(0, TESTDAUER_SEC - vergangen);
 
     const min = String(Math.floor(rest / 60)).padStart(2,"0");
     const sec = String(rest % 60).padStart(2,"0");
@@ -236,164 +261,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (rest === 0) ende(false);
   }
 
-  // Erzeuge IMMER Serie für volle 20 Minuten (0..1200s) in 10s-Schritten
-  function berechneSpeedSerie(abbruch){
-    const keys = [];
-    for (let s = 0; s <= TESTDAUER; s += BUCKET_SEC) keys.push(s);
+  /* ----------- Statistik: pro Minute (60s) ----------- */
 
-    const counts = {};
-    for (const k of keys) counts[k] = 0;
-
-    if (timerStarted && eingabeZeiten.length > 0){
-      for (const t of eingabeZeiten){
-        const sec = Math.floor((t - startzeit) / 1000);
-        const b = Math.min(TESTDAUER, Math.floor(sec / BUCKET_SEC) * BUCKET_SEC);
-        counts[b] = (counts[b] || 0) + 1;
-      }
-    }
-
-    // Eingaben pro Minute (hochgerechnet aus 10s)
-    const speed = keys.map(k => (counts[k] || 0) * (60 / BUCKET_SEC));
-
-    // Bei Abbruch: ab letzter Eingabe waagrecht bis Ende
-    if (abbruch && timerStarted && eingabeZeiten.length > 0){
-      const lastT = Math.max(...eingabeZeiten);
-      const lastSec = Math.min(TESTDAUER, Math.floor((lastT - startzeit) / 1000));
-      const lastBucket = Math.floor(lastSec / BUCKET_SEC) * BUCKET_SEC;
-      const lastIdx = keys.indexOf(lastBucket);
-      const lastSpeed = speed[lastIdx] ?? 0;
-      for (let i = lastIdx + 1; i < speed.length; i++){
-        speed[i] = lastSpeed;
-      }
-    }
-
-    return { keys, speed };
-  }
-
-  function zeichneKurve(keys, speed){
-    statistik.style.display = "block";
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-
-    const pad = 55;
-
-    let maxY = Math.max(...speed, 10);
-    maxY = Math.ceil(maxY / 10) * 10; // schön runden
-
-    ctx.font = "bold 12px Arial";
-    ctx.fillText("Zeit (Minute)", pad, canvas.height - 10);
-    ctx.fillText("Eingaben / Minute", canvas.width - 170, pad - 20);
-
-    // X Raster: 10s Linien, Labels nur jede 1 Minute
-    ctx.strokeStyle = "#eee";
-    for (let i = 0; i < keys.length; i++){
-      const sec = keys[i];
-      const x = pad + i * ((canvas.width - 2*pad) / (keys.length - 1));
-      ctx.beginPath();
-      ctx.moveTo(x, pad);
-      ctx.lineTo(x, canvas.height - pad);
-      ctx.stroke();
-
-      if (sec % 60 === 0){
-        ctx.fillText(String(sec / 60), x - 4, canvas.height - pad + 18);
-      }
-    }
-
-    // Y Raster: 10er Schritte
-    for (let y = 0; y <= maxY; y += 10){
-      const py = canvas.height - pad - (y / maxY) * (canvas.height - 2*pad);
-      ctx.beginPath();
-      ctx.moveTo(pad, py);
-      ctx.lineTo(canvas.width - pad, py);
-      ctx.stroke();
-      ctx.fillText(y, canvas.width - pad + 8, py + 4);
-    }
-
-    // Linie
-    ctx.beginPath();
-    ctx.strokeStyle = "#007acc";
-    ctx.lineWidth = 2;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-
-    for (let i = 0; i < speed.length; i++){
-      const x = pad + i * ((canvas.width - 2*pad) / (speed.length - 1));
-      const y = canvas.height - pad - (speed[i] / maxY) * (canvas.height - 2*pad);
-      if (i === 0) ctx.moveTo(x,y);
-      else ctx.lineTo(x,y);
-    }
-    ctx.stroke();
-  }
-
-  function ende(abbruch){
-    // Wenn noch nie gestartet: trotzdem saubere Auswertung
-    if (!timerStarted){
-      timerStarted = true;
-      startzeit = Date.now();
-    }
-
-    pdfBtn.style.display = "block";
-
-    const dauerMin = (Date.now() - startzeit) / 60000;
-    const avg = (richtig + falsch) / Math.max(dauerMin, 1/60);
-
-    // Übungsbereich ersetzen (fixe UI bleibt!)
-    practice.innerHTML = `
-      <h2>Auswertung</h2>
-      <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
-      <p>Richtig: <span class="green">${richtig}</span></p>
-      <p>Falsch: <span class="red">${falsch}</span></p>
-      <p>Ø Eingaben / Minute: ${avg.toFixed(1)}</p>
-      <div id="spacerStats"></div>
-    `;
-
-    const { keys, speed } = berechneSpeedSerie(abbruch);
-    zeichneKurve(keys, speed);
-
-    letzteAuswertung = {
-      abbruch,
-      richtig,
-      falsch,
-      avg: avg.toFixed(1),
-      dauerMin: dauerMin.toFixed(1)
-    };
-  }
-
-  // PDF
-  pdfBtn.addEventListener("click", () => {
-    if (!letzteAuswertung) return;
-    const { jsPDF } = window.jspdf || {};
-    if (!jsPDF){
-      alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.");
-      return;
-    }
-
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("Speedrechner – Ergebnis", 40, 50);
-
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Status: ${letzteAuswertung.abbruch ? "Abgebrochen" : "Beendet"}`, 40, 80);
-    doc.text(`Richtig: ${letzteAuswertung.richtig}`, 40, 100);
-    doc.text(`Falsch: ${letzteAuswertung.falsch}`, 40, 120);
-    doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avg}`, 40, 140);
-    doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
-
-    // Diagramm als Bild
-    const img = canvas.toDataURL("image/png", 1.0);
-    doc.setFont("helvetica", "bold");
-    doc.text("Geschwindigkeit (Eingaben pro Minute)", 40, 195);
-    doc.addImage(img, "PNG", 40, 210, 515, 195);
-
-    doc.save("speedrechner_ergebnis.pdf");
-  });
-
-  // Timer-Loop
-  setInterval(updateInfo, 1000);
-  updateInfo();
-});
-</script>
-
-</body>
-</html>
+  // Ergebnisserie: 20 Minuten (0..19) + X-Achse zeigt 0..20
+  function berechneSpeedSerieProMinute(abbruch){
+    const minuten = [];
+    for (let
