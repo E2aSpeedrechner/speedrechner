@@ -41,7 +41,7 @@
     min-height:72px;
   }
 
-  /* NEUTRALES FEEDBACK */
+  /* neutrales Feedback */
   #oben{
     display:inline-block;
     padding:4px 18px;
@@ -75,31 +75,6 @@
 
   .green{ color:green; }
   .red{ color:red; }
-
-  #statistik{
-    width:900px;
-    margin:0 auto;
-    display:none;
-  }
-
-  canvas{
-    margin-top:10px;
-    border:1px solid #ccc;
-  }
-
-  h2{ color:#007acc; font-weight:bold; font-size:28px; }
-  h3{ color:#007acc; font-weight:bold; font-size:20px; }
-
-  #legend{
-    margin-top:8px;
-    font-size:14px;
-    font-weight:bold;
-    display:flex;
-    justify-content:center;
-    gap:18px;
-  }
-  .legend-item{ display:flex; gap:8px; align-items:center; }
-  .swatch{ width:18px; height:4px; border-radius:2px; }
 </style>
 </head>
 
@@ -107,7 +82,6 @@
 
 <div id="hint">ESC = Abbrechen</div>
 <button id="restart" class="btn" onclick="location.reload()">Neu starten</button>
-<button id="pdfBtn" class="btn">Ergebnis als PDF herunterladen</button>
 
 <div id="practice">
   <div id="titlePractice">Speedrechner</div>
@@ -120,29 +94,19 @@
   <div id="info"></div>
 </div>
 
-<div id="statistik">
-  <h3>Geschwindigkeit</h3>
-  <canvas id="chart" width="900" height="340"></canvas>
-
-  <div id="legend">
-    <div class="legend-item"><span class="swatch" style="background:#007acc;"></span>Tempo / Minute</div>
-    <div class="legend-item"><span class="swatch" style="background:#e67e22;"></span>Gesamtdurchschnitt</div>
-  </div>
-</div>
-
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-  const TOTAL_MIN = 20;
-  let startzeit = null, timerStarted = false;
   let richtig = 0, falsch = 0, ersteRunde = true;
-  let aktuelleZahl = 0, gemerkteZahl = 0, eingabeZeiten = [];
+  let aktuelleZahl = 0, gemerkteZahl = 0;
+  let gestartet = false;
 
   const oben = document.getElementById("oben");
   const unten = document.getElementById("unten");
   const plus  = document.getElementById("plus");
   const eingabe = document.getElementById("eingabe");
   const info = document.getElementById("info");
+  const practice = document.getElementById("practice");
 
   function zufall(){ return Math.floor(Math.random()*9)+1; }
 
@@ -158,62 +122,62 @@ document.addEventListener("DOMContentLoaded", () => {
 
   initAufgabe();
 
-  function starteTimer(){
-    if(!timerStarted){
-      timerStarted = true;
-      startzeit = Date.now();
-    }
-  }
-
   function neutralFlash(){
     oben.classList.remove("flash-neutral");
     eingabe.classList.remove("input-neutral");
-
-    // Reflow erzwingen für sicheres erneutes Triggern
     void oben.offsetWidth;
-
     oben.classList.add("flash-neutral");
     eingabe.classList.add("input-neutral");
-
     setTimeout(()=>{
       oben.classList.remove("flash-neutral");
       eingabe.classList.remove("input-neutral");
     },120);
   }
 
-  eingabe.addEventListener("input",()=>{
-    if(eingabe.value.length===1){
-      const wert = parseInt(eingabe.value,10);
-      if(isNaN(wert)) return;
-
-      starteTimer();
-      eingabeZeiten.push(Date.now());
-
-      const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
-      korrekt===wert ? richtig++ : falsch++;
-
-      neutralFlash();
-
-      if(ersteRunde){
-        unten.style.visibility="hidden";
-        plus.style.visibility="hidden";
-        ersteRunde=false;
-      }
-
-      gemerkteZahl = aktuelleZahl;
-      aktuelleZahl = zufall();
-      oben.textContent = aktuelleZahl;
-
-      eingabe.value="";
-      updateInfo();
-    }
-  });
-
   function updateInfo(){
     info.innerHTML =
       `Richtig: <span class="green">${richtig}</span> | ` +
       `Falsch: <span class="red">${falsch}</span>`;
   }
+
+  eingabe.addEventListener("input",()=>{
+    if(eingabe.value.length!==1) return;
+
+    const wert = parseInt(eingabe.value,10);
+    if(isNaN(wert)) return;
+
+    gestartet = true;
+
+    const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
+    korrekt===wert ? richtig++ : falsch++;
+
+    neutralFlash();
+
+    if(ersteRunde){
+      unten.style.visibility="hidden";
+      plus.style.visibility="hidden";
+      ersteRunde=false;
+    }
+
+    gemerkteZahl = aktuelleZahl;
+    aktuelleZahl = zufall();
+    oben.textContent = aktuelleZahl;
+
+    eingabe.value="";
+    updateInfo();
+  });
+
+  /* ✅ ESC-Abbruch wieder aktiv */
+  document.addEventListener("keydown", (e)=>{
+    if(e.key==="Escape"){
+      practice.innerHTML = `
+        <h2>Auswertung</h2>
+        <p>Abgebrochen</p>
+        <p>Richtig: <span class="green">${richtig}</span></p>
+        <p>Falsch: <span class="red">${falsch}</span></p>
+      `;
+    }
+  });
 
   updateInfo();
 });
