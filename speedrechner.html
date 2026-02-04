@@ -25,8 +25,18 @@
     cursor:pointer;
   }
 
-  #restart{ position:fixed; left:10px; top:34px; }
-  #pdfBtn{ position:fixed; right:10px; top:10px; display:none; }
+  #restart{
+    position:fixed;
+    left:10px;
+    top:34px;
+  }
+
+  #pdfBtn{
+    position:fixed;
+    right:10px;
+    top:10px;
+    display:none;
+  }
 
   #titlePractice{
     font-weight:bold;
@@ -41,7 +51,7 @@
     min-height:72px;
   }
 
-  /* neutrales Feedback */
+  /* NEUTRALES FEEDBACK (kein richtig/falsch) */
   #oben{
     display:inline-block;
     padding:4px 18px;
@@ -73,8 +83,49 @@
     min-height:22px;
   }
 
+  /* Richtig/Falsch-Zähler bleibt wie vorher */
   .green{ color:green; }
   .red{ color:red; }
+
+  /* Statistik */
+  #statistik{
+    width:900px;
+    margin:0 auto;
+    display:none;
+  }
+
+  canvas{
+    margin-top:10px;
+    border:1px solid #ccc;
+  }
+
+  h2{
+    color:#007acc;
+    font-weight:bold;
+    font-size:28px;
+    margin:0 0 10px 0;
+  }
+
+  h3{
+    color:#007acc;
+    font-weight:bold;
+    font-size:20px;
+    margin:0;
+  }
+
+  #spacerStats{ height:18px; }
+
+  #legend{
+    margin-top:8px;
+    font-size:14px;
+    font-weight:bold;
+    display:flex;
+    justify-content:center;
+    gap:18px;
+    align-items:center;
+  }
+  .legend-item{ display:flex; gap:8px; align-items:center; }
+  .swatch{ width:18px; height:4px; border-radius:2px; display:inline-block; }
 </style>
 </head>
 
@@ -82,6 +133,7 @@
 
 <div id="hint">ESC = Abbrechen</div>
 <button id="restart" class="btn" onclick="location.reload()">Neu starten</button>
+<button id="pdfBtn" class="btn">Ergebnis als PDF herunterladen</button>
 
 <div id="practice">
   <div id="titlePractice">Speedrechner</div>
@@ -94,91 +146,333 @@
   <div id="info"></div>
 </div>
 
+<div id="statistik">
+  <h3>Geschwindigkeit</h3>
+  <canvas id="chart" width="900" height="340"></canvas>
+
+  <div id="legend">
+    <div class="legend-item"><span class="swatch" style="background:#007acc;"></span>Tempo / Minute</div>
+    <div class="legend-item"><span class="swatch" style="background:#e67e22;"></span>Gesamtdurchschnitt</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
 <script>
 document.addEventListener("DOMContentLoaded", () => {
 
-  let richtig = 0, falsch = 0, ersteRunde = true;
-  let aktuelleZahl = 0, gemerkteZahl = 0;
-  let gestartet = false;
+  const TESTDAUER_SEC = 20 * 60; // 1200 Sekunden
+  const TOTAL_MIN = 20;
 
+  let startzeit = null;
+  let timerStarted = false;
+
+  let richtig = 0;
+  let falsch = 0;
+  let ersteRunde = true;
+
+  let aktuelleZahl = 0;
+  let gemerkteZahl = 0;
+  let eingabeZeiten = [];
+
+  const practice = document.getElementById("practice");
   const oben = document.getElementById("oben");
   const unten = document.getElementById("unten");
   const plus  = document.getElementById("plus");
   const eingabe = document.getElementById("eingabe");
   const info = document.getElementById("info");
-  const practice = document.getElementById("practice");
 
-  function zufall(){ return Math.floor(Math.random()*9)+1; }
+  const statistik = document.getElementById("statistik");
+  const canvas = document.getElementById("chart");
+  const ctx = canvas.getContext("2d");
+  const pdfBtn = document.getElementById("pdfBtn");
 
+  let letzteAuswertung = null;
+
+  function zufall(){
+    return Math.floor(Math.random() * 9) + 1;
+  }
+
+  // Robuste Initialisierung (Zahlen garantiert sichtbar)
   function initAufgabe(){
     aktuelleZahl = zufall();
     gemerkteZahl = zufall();
-    oben.textContent = aktuelleZahl;
-    unten.textContent = gemerkteZahl;
+
+    oben.textContent = String(aktuelleZahl);
+    unten.textContent = String(gemerkteZahl);
+
     plus.style.visibility = "visible";
     unten.style.visibility = "visible";
+    plus.style.display = "block";
+    unten.style.display = "block";
+
     ersteRunde = true;
   }
 
   initAufgabe();
 
+  function starteTimer(){
+    if (!timerStarted){
+      timerStarted = true;
+      startzeit = Date.now();
+    }
+  }
+
+  // Neutraler „Tick“ nach Eingabe (ohne richtig/falsch)
   function neutralFlash(){
     oben.classList.remove("flash-neutral");
     eingabe.classList.remove("input-neutral");
+
+    // Reflow, damit es bei sehr schnellem Tippen jedes Mal sicher triggert
     void oben.offsetWidth;
+
     oben.classList.add("flash-neutral");
     eingabe.classList.add("input-neutral");
+
     setTimeout(()=>{
       oben.classList.remove("flash-neutral");
       eingabe.classList.remove("input-neutral");
-    },120);
+    }, 120);
   }
 
-  function updateInfo(){
-    info.innerHTML =
-      `Richtig: <span class="green">${richtig}</span> | ` +
-      `Falsch: <span class="red">${falsch}</span>`;
-  }
+  // Eingabe: sofort auswerten
+  eingabe.addEventListener("input", () => {
+    if (eingabe.value.length !== 1) return;
 
-  eingabe.addEventListener("input",()=>{
-    if(eingabe.value.length!==1) return;
+    const wert = parseInt(eingabe.value, 10);
+    if (Number.isNaN(wert)) return;
 
-    const wert = parseInt(eingabe.value,10);
-    if(isNaN(wert)) return;
-
-    gestartet = true;
+    starteTimer();
+    eingabeZeiten.push(Date.now());
 
     const korrekt = (aktuelleZahl + gemerkteZahl) % 10;
-    korrekt===wert ? richtig++ : falsch++;
+    (wert === korrekt) ? richtig++ : falsch++;
 
+    // neutrales Feedback (nicht wertend)
     neutralFlash();
 
-    if(ersteRunde){
-      unten.style.visibility="hidden";
-      plus.style.visibility="hidden";
-      ersteRunde=false;
+    if (ersteRunde){
+      unten.style.visibility = "hidden";
+      plus.style.visibility = "hidden";
+      ersteRunde = false;
     }
 
     gemerkteZahl = aktuelleZahl;
     aktuelleZahl = zufall();
-    oben.textContent = aktuelleZahl;
+    oben.textContent = String(aktuelleZahl);
 
-    eingabe.value="";
+    eingabe.value = "";
     updateInfo();
   });
 
-  /* ✅ ESC-Abbruch wieder aktiv */
-  document.addEventListener("keydown", (e)=>{
-    if(e.key==="Escape"){
-      practice.innerHTML = `
-        <h2>Auswertung</h2>
-        <p>Abgebrochen</p>
-        <p>Richtig: <span class="green">${richtig}</span></p>
-        <p>Falsch: <span class="red">${falsch}</span></p>
-      `;
-    }
+  // ESC-Abbruch: Auswertung wie gewohnt
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") ende(true);
   });
 
+  function updateInfo(){
+    if (!timerStarted){
+      info.innerHTML =
+        `Zeit: 20:00 | ` +
+        `Richtig: <span class="green">${richtig}</span> | ` +
+        `Falsch: <span class="red">${falsch}</span>`;
+      return;
+    }
+
+    const vergangen = Math.floor((Date.now() - startzeit) / 1000);
+    const rest = Math.max(0, TESTDAUER_SEC - vergangen);
+
+    const min = String(Math.floor(rest / 60)).padStart(2,"0");
+    const sec = String(rest % 60).padStart(2,"0");
+
+    info.innerHTML =
+      `Zeit: ${min}:${sec} | ` +
+      `Richtig: <span class="green">${richtig}</span> | ` +
+      `Falsch: <span class="red">${falsch}</span>`;
+
+    if (rest === 0) ende(false);
+  }
+
+  // Statistik pro Minute (0..19), X-Achse zeigt 0..20
+  function berechneTempoProMinute(abbruch){
+    const counts = new Array(TOTAL_MIN).fill(0);
+
+    if (timerStarted && eingabeZeiten.length > 0){
+      for (const t of eingabeZeiten){
+        const sec = Math.floor((t - startzeit) / 1000);
+        const m = Math.min(TOTAL_MIN - 1, Math.floor(sec / 60));
+        counts[m] += 1;
+      }
+    }
+
+    const speed = counts.slice();
+
+    // Abbruch: ab letzter Minute waagrecht bis Minute 20
+    if (abbruch && timerStarted && eingabeZeiten.length > 0){
+      const lastSec = Math.floor((Math.max(...eingabeZeiten) - startzeit) / 1000);
+      const lastMin = Math.min(TOTAL_MIN - 1, Math.floor(lastSec / 60));
+      const lastVal = speed[lastMin];
+      for (let i = lastMin + 1; i < speed.length; i++){
+        speed[i] = lastVal;
+      }
+    }
+
+    // Gesamtdurchschnitt als Linie (über 20 Minuten, konsistent zur Fortführung)
+    const sum = speed.reduce((a,b)=>a+b,0);
+    const avg = sum / TOTAL_MIN;
+
+    return { speed, avg };
+  }
+
+  // Weiche Linie (Bézier)
+  function drawSmoothLine(points, color){
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+
+    ctx.moveTo(points[0].x, points[0].y);
+
+    for (let i = 1; i < points.length - 1; i++){
+      const xc = (points[i].x + points[i+1].x) / 2;
+      const yc = (points[i].y + points[i+1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+    }
+
+    ctx.quadraticCurveTo(
+      points[points.length - 2].x,
+      points[points.length - 2].y,
+      points[points.length - 1].x,
+      points[points.length - 1].y
+    );
+
+    ctx.stroke();
+  }
+
+  function zeichneKurven(speed, avg){
+    statistik.style.display = "block";
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const pad = 55;
+    const w = canvas.width - 2 * pad;
+    const h = canvas.height - 2 * pad;
+
+    let maxY = Math.max(...speed, avg, 10);
+    maxY = Math.ceil(maxY / 10) * 10;
+
+    ctx.font = "bold 12px Arial";
+    ctx.fillStyle = "#000";
+
+    // Achsentitel
+    ctx.fillText("Zeit (Minute)", pad, canvas.height - 10);
+    ctx.fillText("Eingaben / Minute", canvas.width - 170, pad - 20);
+
+    // X Raster: 0..20, Labels jede Minute
+    ctx.strokeStyle = "#eee";
+    for (let i = 0; i <= TOTAL_MIN; i++){
+      const x = pad + (i / TOTAL_MIN) * w;
+      ctx.beginPath();
+      ctx.moveTo(x, pad);
+      ctx.lineTo(x, pad + h);
+      ctx.stroke();
+      ctx.fillText(String(i), x - 4, canvas.height - pad + 18);
+    }
+
+    // Y Raster: 10er Schritte
+    for (let y = 0; y <= maxY; y += 10){
+      const py = pad + h - (y / maxY) * h;
+      ctx.beginPath();
+      ctx.moveTo(pad, py);
+      ctx.lineTo(pad + w, py);
+      ctx.stroke();
+      ctx.fillText(String(y), pad + w + 8, py + 4);
+    }
+
+    // Tempo-Linie (blau)
+    const ptsSpeed = speed.map((v,i) => ({
+      x: pad + (i / (TOTAL_MIN - 1)) * w,
+      y: pad + h - (v / maxY) * h
+    }));
+    drawSmoothLine(ptsSpeed, "#007acc");
+
+    // Gesamtdurchschnitt (orange, gerade Linie)
+    const yAvg = pad + h - (avg / maxY) * h;
+    ctx.beginPath();
+    ctx.strokeStyle = "#e67e22";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.moveTo(pad, yAvg);
+    ctx.lineTo(pad + w, yAvg);
+    ctx.stroke();
+  }
+
+  function ende(abbruch){
+    // Wenn noch nie gestartet: trotzdem saubere Auswertung
+    if (!timerStarted){
+      timerStarted = true;
+      startzeit = Date.now();
+    }
+
+    pdfBtn.style.display = "block";
+
+    const dauerMin = (Date.now() - startzeit) / 60000;
+    const avgAllReal = (richtig + falsch) / Math.max(dauerMin, 1/60);
+
+    practice.innerHTML = `
+      <h2>Auswertung</h2>
+      <p>${abbruch ? "Abgebrochen" : "Beendet"}</p>
+      <p>Richtig: <span class="green">${richtig}</span></p>
+      <p>Falsch: <span class="red">${falsch}</span></p>
+      <p>Ø Eingaben / Minute: ${avgAllReal.toFixed(1)}</p>
+      <div id="spacerStats"></div>
+    `;
+
+    const { speed, avg } = berechneTempoProMinute(abbruch);
+    zeichneKurven(speed, avg);
+
+    letzteAuswertung = {
+      abbruch,
+      richtig,
+      falsch,
+      avgAllReal: avgAllReal.toFixed(1),
+      dauerMin: dauerMin.toFixed(1)
+    };
+  }
+
+  // PDF Export (wie gestern)
+  pdfBtn.addEventListener("click", () => {
+    if (!letzteAuswertung) return;
+    const { jsPDF } = window.jspdf || {};
+    if (!jsPDF){
+      alert("PDF-Bibliothek konnte nicht geladen werden. Bitte Seite neu laden.");
+      return;
+    }
+
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Speedrechner – Ergebnis", 40, 50);
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Status: ${letzteAuswertung.abbruch ? "Abgebrochen" : "Beendet"}`, 40, 80);
+    doc.text(`Richtig: ${letzteAuswertung.richtig}`, 40, 100);
+    doc.text(`Falsch: ${letzteAuswertung.falsch}`, 40, 120);
+    doc.text(`Ø Eingaben / Minute: ${letzteAuswertung.avgAllReal}`, 40, 140);
+    doc.text(`Dauer (Minuten): ${letzteAuswertung.dauerMin}`, 40, 160);
+
+    const img = canvas.toDataURL("image/png", 1.0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Geschwindigkeit (Eingaben pro Minute)", 40, 195);
+    doc.addImage(img, "PNG", 40, 210, 515, 195);
+
+    doc.save("speedrechner_ergebnis.pdf");
+  });
+
+  // Timer
+  setInterval(updateInfo, 1000);
   updateInfo();
 });
 </script>
